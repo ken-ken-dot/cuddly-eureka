@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Environment / secrets — never commit real provider keys
+.env
+.env.*
+!.env.example
+
+# Builds and caches
+build/
+dist/
+.expo/
+*.log
+.DS_Store
+
+# Native output (V1 stays managed; prebuild output is disposable)
+ios/
+android/
+
+# Editor
+.idea/
+.vscode/
+*.swp

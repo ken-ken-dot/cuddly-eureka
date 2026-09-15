@@ -1,0 +1,21 @@
+{
+  "name": "vuga",
+  "version": "1.0.0",
+  "private": true,
+  "description": "VUGA — Kinyarwanda ⇄ Mandarin speech translation and correction coach for market vendors. V1: Expo mobile app + Node/Express proxy.",
+  "workspaces": [
+    "backend",
+    "mobile"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "setup": "npm install --workspaces --include-workspace-root",
+    "proxy": "npm run dev --workspace backend",
+    "app": "npm run start --workspace mobile",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "license": "UNLICENSED"
+}
