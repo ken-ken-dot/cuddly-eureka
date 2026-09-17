@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import type { ThemeTokens } from "../theme/tokens";
 import { RADII, SPACING, TYPE } from "../theme/tokens";
+import { elevate } from "../theme/elevation";
 import { TOPIC_ORDER, DEFAULT_TOPIC } from "../corrections/data";
 import { levelLabel, type ProficiencyReport } from "../corrections/proficiency";
 
@@ -30,7 +31,7 @@ export function TopicBreakdown({ report, tokens: t }: TopicBreakdownProps) {
   const practiced = ordered.filter((tp) => tp.mistakes > 0 || tp.clean > 0);
   if (practiced.length === 0) {
     return (
-      <View style={[styles.card, { backgroundColor: t.surface2, borderColor: t.line }]}>
+      <View style={[styles.card, { backgroundColor: t.surface2, borderColor: t.line }, elevate("card", t)]}>
         <Text style={[styles.emptyText, { color: t.inkDim }]}>
           Keep a correction or translate a typed phrase and your per-topic progress will appear here.
         </Text>
@@ -39,7 +40,7 @@ export function TopicBreakdown({ report, tokens: t }: TopicBreakdownProps) {
   }
 
   return (
-    <View style={[styles.card, { backgroundColor: t.surface2, borderColor: t.line }]}>
+    <View style={[styles.card, { backgroundColor: t.surface2, borderColor: t.line }, elevate("card", t)]}>
       {practiced.map((tp) => (
         <View
           key={tp.topic}
@@ -88,7 +89,7 @@ function LevelMeter({ level, tokens }: { level: 0 | 1 | 2 | 3; tokens: ThemeToke
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: RADII.m,
+    borderRadius: RADII.card,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: SPACING.m,
     paddingVertical: SPACING.s,

@@ -1,6 +1,8 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { PhosphorIcon } from "./PhosphorIcon";
+import { Warning, X } from "phosphor-react-native";
 import type { ThemeTokens } from "../theme/tokens";
 import { RADII, SPACING, TYPE } from "../theme/tokens";
 
@@ -20,6 +22,7 @@ export function ErrorBar({ tokens, message, onDismiss }: ErrorBarProps) {
       accessibilityLabel={`Error: ${message}`}
       style={[styles.bar, { backgroundColor: t.rustSoft, borderColor: t.rust }]}
     >
+      <PhosphorIcon icon={Warning} size={16} color={t.rust} />
       <Text style={[styles.text, { color: t.ink }]}>{message}</Text>
       {onDismiss ? (
         <Pressable
@@ -29,7 +32,7 @@ export function ErrorBar({ tokens, message, onDismiss }: ErrorBarProps) {
           hitSlop={12}
           style={styles.close}
         >
-          <Text style={[styles.closeText, { color: t.ink }]}>✕</Text>
+          <PhosphorIcon icon={X} size={14} color={t.inkDim} weight="bold" />
         </Pressable>
       ) : null}
     </View>
@@ -40,7 +43,7 @@ const styles = StyleSheet.create({
   bar: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: RADII.s,
+    borderRadius: RADII.button,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: SPACING.m,
     paddingVertical: SPACING.s,
@@ -53,9 +56,5 @@ const styles = StyleSheet.create({
   },
   close: {
     padding: 2,
-  },
-  closeText: {
-    fontSize: TYPE.small,
-    fontWeight: "700",
   },
 });

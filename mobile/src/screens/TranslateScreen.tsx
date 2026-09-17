@@ -5,7 +5,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -14,18 +13,27 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useTheme } from "../theme";
-import { SPACING, TYPE } from "../theme/tokens";
-import { Pill } from "../components/Pill";
+import { RADII, SPACING, TRACKING, TYPE } from "../theme/tokens";
+import { elevate } from "../theme/elevation";
+import { PhosphorIcon } from "../components/PhosphorIcon";
+import { Logo } from "../components/Logo";
+import { LanguageToggle } from "../components/LanguageToggle";
+import { MicButton, type MicButtonState } from "../components/MicButton";
+import { EmptyState } from "../components/EmptyState";
 import { Ticket } from "../components/Ticket";
 import { CoachingTicket } from "../components/CoachingTicket";
 import { ErrorBar } from "../components/ErrorBar";
-import { Waveform } from "../components/Waveform";
-import { TriangleDivider } from "../components/TriangleDivider";
 import { useSession, ERROR_COPY } from "../store/session";
 import { useCorrections } from "../store/corrections";
 import { useSpeech } from "../speech/useSpeech";
 import { evaluateKeptMistake } from "../corrections/notifications";
-import { DIRECTIONS, directionLabel, type Turn } from "../types";
+import type { Turn } from "../types";
+import {
+  Keyboard,
+  Microphone,
+  PaperPlaneRight,
+  Waveform as WaveformIcon,
+} from "phosphor-react-native";
 
 export function TranslateScreen() {
   const { tokens: t } = useTheme();
@@ -98,6 +106,13 @@ export function TranslateScreen() {
     }
   }, [session.lastTurnId]);
 
+  // Mic button state machine: idle breathing → recording ring → processing.
+  const micState: MicButtonState = session.submitting
+    ? "processing"
+    : session.listening
+      ? "recording"
+      : "idle";
+
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: t.surface }]} edges={["top"]}>
       <KeyboardAvoidingView
@@ -105,17 +120,18 @@ export function TranslateScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={Platform.OS === "ios" ? 88 : 0}
       >
-        {/* Direction selector — V1 is locked to Kinyarwanda ⇄ Mandarin */}
-        <View style={styles.directionRow}>
-          {DIRECTIONS.map((d) => (
-            <Pill
-              key={d}
-              tokens={t}
-              label={directionLabel(d)}
-              active={session.direction === d}
-              onPress={() => session.setDirection(d)}
-            />
-          ))}
+        {/* Brand + direction selector — V1 is locked to Kinyarwanda ⇄ Mandarin */}
+        <View style={styles.header}>
+          <View style={styles.brandRow}>
+            <Logo size={18} ochre={t.ochre} rust={t.rust} />
+            <Text style={[styles.brand, { color: t.ink }]}>VUGA</Text>
+            {session.mockMode ? (
+              <View style={[styles.mockTag, { backgroundColor: t.rustSoft }]}>
+                <Text style={[styles.mockText, { color: t.rust }]}>DEMO</Text>
+              </View>
+            ) : null}
+          </View>
+          <LanguageToggle tokens={t} value={session.direction} onChange={session.setDirection} />
         </View>
 
         {session.mockMode ? (
@@ -136,52 +152,57 @@ export function TranslateScreen() {
           </View>
         ) : null}
 
-        {/* Transcript */}
+        {/* Transcript — each exchange is a tactile card */}
         <FlatList
           ref={listRef}
           data={session.turns}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
-            <View style={styles.empty}>
-              <Text style={[styles.emptyTitle, { color: t.ink }]}>Nothing translated yet</Text>
-              <Text style={[styles.emptyBody, { color: t.inkDim }]}>
-                Press the microphone and speak. You'll see what was heard, its translation, and a
-                ticket for any word worth fixing.
-              </Text>
-              <TriangleDivider colors={[t.ochre, t.rust, t.moss]} />
-            </View>
+            <EmptyState
+              tokens={t}
+              icon={WaveformIcon}
+              title="Nothing translated yet"
+              body="Press the microphone and speak. You'll see what was heard, its translation, and a ticket for any word worth fixing."
+            />
           }
-          renderItem={({ item }) => (
-            <View
-              style={[styles.turn, item.speaker === "them" ? styles.turnThem : styles.turnYou]}
-            >
-              <Text style={[styles.speaker, { color: t.inkDim }]}>
-                {item.speaker === "you" ? "YOU" : "THEM"}
-              </Text>
-              <Text style={[styles.original, { color: t.ink }]}>{item.original}</Text>
-              <Text style={[styles.translated, { color: t.ochre }]}>{item.translated}</Text>
-              {item.correction ? (
-                <View style={styles.ticketWrap}>
-                  <Ticket
-                    tokens={t}
-                    wrong={item.correction.wrong}
-                    right={item.correction.right}
-                    tip={item.correction.tip}
-                    kept={Boolean(item.keptId)}
-                    onKeep={() => onKeep(item)}
-                  />
-                </View>
-              ) : null}
-              {/* V3 typed-text coaching: only ever attached to typed turns; the
-                  spoken flow renders exactly as before. */}
-              {item.coaching ? (
-                <View style={styles.ticketWrap}>
-                  <CoachingTicket tokens={t} coaching={item.coaching} />
-                </View>
-              ) : null}
-            </View>
-          )}
+          renderItem={({ item }) => {
+            const them = item.speaker === "them";
+            return (
+              <View
+                style={[
+                  styles.turn,
+                  { backgroundColor: them ? t.surface2 : t.card, borderColor: t.line },
+                  elevate("card", t),
+                ]}
+              >
+                <Text style={[styles.speaker, them ? { color: t.teal } : { color: t.ochre }]}>
+                  {them ? "THEM" : "YOU"}
+                </Text>
+                <Text style={[styles.original, { color: t.ink }]}>{item.original}</Text>
+                <Text style={[styles.translated, { color: t.ochre }]}>{item.translated}</Text>
+                {item.correction ? (
+                  <View style={styles.ticketWrap}>
+                    <Ticket
+                      tokens={t}
+                      wrong={item.correction.wrong}
+                      right={item.correction.right}
+                      tip={item.correction.tip}
+                      kept={Boolean(item.keptId)}
+                      onKeep={() => onKeep(item)}
+                    />
+                  </View>
+                ) : null}
+                {/* V3 typed-text coaching: only ever attached to typed turns; the
+                    spoken flow renders exactly as before. */}
+                {item.coaching ? (
+                  <View style={styles.ticketWrap}>
+                    <CoachingTicket tokens={t} coaching={item.coaching} />
+                  </View>
+                ) : null}
+              </View>
+            );
+          }}
         />
 
         {/* Text input mode */}
@@ -203,44 +224,40 @@ export function TranslateScreen() {
               onPress={onSubmitText}
               style={({ pressed }) => [
                 styles.send,
-                { backgroundColor: t.moss, opacity: pressed || session.submitting ? 0.7 : 1 },
+                { backgroundColor: t.ochre, opacity: pressed || session.submitting ? 0.85 : 1 },
               ]}
             >
-              <Text style={[styles.sendText, { color: t.ink }]}>→</Text>
+              <PhosphorIcon icon={PaperPlaneRight} size={20} color={t.surface} weight="fill" />
             </Pressable>
           </View>
         ) : null}
 
-        {/* Mic + mode toggle */}
+        {/* Mic-first controls with the mode toggle beside it */}
         <View style={[styles.controls, { borderTopColor: t.line }]}>
-          <Waveform active={session.listening} color={t.rust} />
-          <Pressable
-            accessible
-            accessibilityRole="button"
-            accessibilityState={{ busy: session.listening }}
-            accessibilityLabel={
-              session.listening ? "Stop listening and translate" : "Start listening"
-            }
-            onPress={onMicPress}
-            disabled={session.submitting}
-            style={({ pressed }) => [
-              styles.mic,
-              {
-                backgroundColor: session.listening ? t.rust : t.ochre,
-                opacity: pressed || session.submitting ? 0.85 : 1,
-              },
-            ]}
-          >
-            <Text style={[styles.micText, { color: t.surface }]}>
-              {session.listening ? "STOP" : session.submitting ? "…" : "MIC"}
-            </Text>
-          </Pressable>
-          <Pill
-            tokens={t}
-            label={textMode ? "Text: ON" : "Text mode"}
-            active={textMode}
-            onPress={() => setTextMode((v) => !v)}
-          />
+          <View style={styles.side}>
+            <Pressable
+              accessible
+              accessibilityRole="button"
+              accessibilityState={{ selected: textMode }}
+              accessibilityLabel={textMode ? "Switch to voice mode" : "Switch to text input mode"}
+              onPress={() => setTextMode((v) => !v)}
+              style={({ pressed }) => [
+                styles.modeBtn,
+                { backgroundColor: textMode ? t.cardIn : "transparent", opacity: pressed ? 0.8 : 1 },
+              ]}
+            >
+              <PhosphorIcon
+                icon={textMode ? Keyboard : Microphone}
+                size={16}
+                color={textMode ? t.ochre : t.inkDim}
+              />
+              <Text style={[styles.modeLabel, { color: textMode ? t.ochre : t.inkDim }]}>
+                {textMode ? "TEXT" : "VOICE"}
+              </Text>
+            </Pressable>
+          </View>
+          <MicButton tokens={t} state={micState} onPress={onMicPress} />
+          <View style={styles.side} />
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -250,43 +267,54 @@ export function TranslateScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   flex: { flex: 1 },
-  directionRow: {
-    flexDirection: "row",
-    gap: SPACING.s,
+  header: {
     paddingHorizontal: SPACING.m,
     paddingTop: SPACING.s,
     paddingBottom: SPACING.xs,
+    gap: SPACING.s,
   },
+  brandRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.s,
+    minHeight: 24,
+  },
+  brand: { fontSize: TYPE.body, fontWeight: "800", letterSpacing: 3 },
+  mockTag: {
+    borderRadius: RADII.pill,
+    paddingHorizontal: SPACING.s,
+    paddingVertical: 2,
+  },
+  mockText: { fontSize: TYPE.tiny, fontWeight: "800", letterSpacing: TRACKING.wide },
   mockBanner: {
     marginHorizontal: SPACING.m,
     marginTop: SPACING.xs,
-    borderRadius: 8,
+    borderRadius: RADII.card,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: SPACING.s,
     paddingVertical: 6,
   },
-  mockText: { fontSize: TYPE.tiny, fontWeight: "700" },
   errorWrap: { paddingHorizontal: SPACING.m, paddingTop: SPACING.xs },
-  listContent: { padding: SPACING.m, flexGrow: 1 },
-  empty: { flex: 1, justifyContent: "center", gap: SPACING.s, paddingHorizontal: SPACING.l },
-  emptyTitle: { fontSize: TYPE.h2, fontWeight: "700", textAlign: "center" },
-  emptyBody: { fontSize: TYPE.body, textAlign: "center", lineHeight: 22 },
-  turn: { marginBottom: SPACING.l },
-  turnYou: { alignSelf: "stretch" },
-  turnThem: { alignSelf: "stretch" },
-  speaker: { fontSize: TYPE.tiny, letterSpacing: 1, fontWeight: "700", marginBottom: 2 },
+  listContent: { padding: SPACING.m, flexGrow: 1, gap: SPACING.m },
+  turn: {
+    borderRadius: RADII.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: SPACING.m,
+  },
+  speaker: { fontSize: TYPE.tiny, letterSpacing: TRACKING.wide, fontWeight: "800", marginBottom: 4 },
   original: { fontSize: TYPE.body, lineHeight: 22 },
   translated: { fontSize: TYPE.body, lineHeight: 24, marginTop: 2, fontWeight: "600" },
   ticketWrap: { marginTop: SPACING.s },
   textInputRow: {
     flexDirection: "row",
+    alignItems: "flex-end",
     gap: SPACING.s,
     paddingHorizontal: SPACING.m,
     paddingVertical: SPACING.s,
   },
   textInput: {
     flex: 1,
-    borderRadius: 12,
+    borderRadius: RADII.card,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: SPACING.m,
     paddingTop: 10,
@@ -297,28 +325,27 @@ const styles = StyleSheet.create({
   },
   send: {
     width: 44,
-    borderRadius: 12,
+    height: 44,
+    borderRadius: RADII.button,
     alignItems: "center",
     justifyContent: "center",
   },
-  sendText: { fontSize: 20, fontWeight: "800" },
   controls: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: SPACING.m,
-    paddingHorizontal: SPACING.m,
-    paddingVertical: SPACING.s,
     borderTopWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: SPACING.m,
+    paddingTop: SPACING.xs,
   },
-  mic: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+  side: { width: 84, alignItems: "center" },
+  modeBtn: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 3,
-    borderColor: "rgba(0,0,0,0.15)",
+    gap: 6,
+    borderRadius: RADII.button,
+    paddingHorizontal: SPACING.s,
+    paddingVertical: 8,
   },
-  micText: { fontSize: TYPE.small, fontWeight: "800", letterSpacing: 1 },
+  modeLabel: { fontSize: TYPE.tiny, fontWeight: "800", letterSpacing: TRACKING.wide },
 });

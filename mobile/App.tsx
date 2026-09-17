@@ -8,6 +8,8 @@ import { useCorrections } from "./src/store/corrections";
 import { useTracking } from "./src/corrections/tracking";
 import { Logo } from "./src/components/Logo";
 import { DARK } from "./src/theme/tokens";
+import { AuthGate } from "./src/components/AuthGate";
+import { ErrorBoundary } from "./src/components/ErrorBoundary";
 
 function HydrationGate({ children }: { children: React.ReactNode }) {
   const hydrateSettings = useSettings((s) => s.hydrate);
@@ -42,11 +44,15 @@ function HydrationGate({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <HydrationGate>
-      <ThemeProvider>
-        <RootTabs />
-      </ThemeProvider>
-    </HydrationGate>
+    <ErrorBoundary>
+      <HydrationGate>
+        <ThemeProvider>
+          <AuthGate>
+            <RootTabs />
+          </AuthGate>
+        </ThemeProvider>
+      </HydrationGate>
+    </ErrorBoundary>
   );
 }
 

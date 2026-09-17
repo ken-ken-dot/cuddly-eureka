@@ -1,16 +1,27 @@
 import React, { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useTheme } from "../theme";
-import { SPACING, TYPE } from "../theme/tokens";
+import { RADII, SPACING, TRACKING, TYPE } from "../theme/tokens";
+import { elevate } from "../theme/elevation";
+import { PhosphorIcon } from "../components/PhosphorIcon";
 import { TriangleDivider } from "../components/TriangleDivider";
+import {
+  ArrowLeft,
+  Bell,
+  GlobeHemisphereWest,
+  Palette,
+  Plugs,
+  ShieldCheck,
+} from "phosphor-react-native";
 import { useSettings } from "../store/settings";
 import {
   requestV3Notifications,
   notificationStatusLabel,
 } from "../corrections/notifications";
 import type { ThemeMode } from "../store/settings";
+import { useAuth } from "../store/auth";
 
 const MODES: ReadonlyArray<{ value: ThemeMode; label: string }> = [
   { value: "dark", label: "Dark" },
@@ -24,6 +35,9 @@ export function ProfileScreen() {
   const setProxyUrl = useSettings((s) => s.setProxyUrl);
   const notificationsOn = useSettings((s) => s.notificationsOn);
   const setNotificationsOn = useSettings((s) => s.setNotificationsOn);
+  const user = useAuth((s) => s.user);
+  const logout = useAuth((s) => s.logout);
+  const authLoading = useAuth((s) => s.loading);
 
   // V3: OS permission status, so the toggle's caption is never ambiguous.
   const [notifStatus, setNotifStatus] = useState<"granted" | "denied" | "unavailable" | "unset">("unset");
@@ -58,29 +72,54 @@ export function ProfileScreen() {
         <Text style={[styles.title, { color: t.ink }]}>Profile</Text>
         <TriangleDivider colors={[t.ochre, t.rust, t.moss]} />
 
-        <Section title="Appearance" tokens={t}>
+        <Section title="Appearance" icon={Palette} tokens={t}>
           <View
             style={[styles.card, { backgroundColor: t.surface2, borderColor: t.line }]}
           >
-            {MODES.map((m) => (
-              <View key={m.value} style={styles.settingRow}>
-                <Text style={[styles.settingLabel, { color: t.ink }]}>{m.label}</Text>
-                <Switch
-                  value={mode === m.value}
-                  onValueChange={(on) => {
-                    if (on) setMode(m.value);
-                  }}
-                  trackColor={{ true: t.moss, false: t.surface3 }}
-                  thumbColor={t.ink}
-                  accessibilityLabel={`${m.label} theme`}
-                  accessibilityState={{ checked: mode === m.value }}
-                />
-              </View>
-            ))}
+            <View style={styles.radioGroup}>
+              {MODES.map((m) => {
+                const active = mode === m.value;
+                return (
+                  <Pressable
+                    key={m.value}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: active }}
+                    accessibilityLabel={`${m.label} theme`}
+                    onPress={() => setMode(m.value)}
+                    style={({ pressed }) => [
+                      styles.radioItem,
+                      {
+                        backgroundColor: active ? t.mossSoft : "transparent",
+                        borderColor: active ? t.moss : t.line,
+                        opacity: pressed ? 0.8 : 1,
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.radioDot,
+                        {
+                          borderColor: active ? t.moss : t.inkDim,
+                          backgroundColor: active ? t.moss : "transparent",
+                        },
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        styles.radioLabel,
+                        { color: active ? t.ink : t.inkDim },
+                      ]}
+                    >
+                      {m.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
         </Section>
 
-        <Section title="Language pair" tokens={t}>
+        <Section title="Language pair" icon={GlobeHemisphereWest} tokens={t}>
           <View style={[styles.card, { backgroundColor: t.surface2, borderColor: t.line }]}>
             <View style={styles.settingRow}>
               <Text style={[styles.settingLabel, { color: t.ink }]}>
@@ -95,7 +134,7 @@ export function ProfileScreen() {
           </View>
         </Section>
 
-        <Section title="Notifications" tokens={t}>
+        <Section title="Notifications" icon={Bell} tokens={t}>
           <View style={[styles.card, { backgroundColor: t.surface2, borderColor: t.line }]}>
             <View style={styles.settingRow}>
               <Text style={[styles.settingLabel, { color: t.ink }]}>Coaching reminders</Text>
@@ -124,7 +163,7 @@ export function ProfileScreen() {
           </View>
         </Section>
 
-        <Section title="Server" tokens={t}>
+        <Section title="Server" icon={Plugs} tokens={t}>
           <View style={[styles.card, { backgroundColor: t.surface2, borderColor: t.line }]}>
             <Text style={[styles.settingNote, { color: t.inkDim, marginBottom: 6 }]}>
               Address of the VUGA translation proxy (advanced).
@@ -144,7 +183,7 @@ export function ProfileScreen() {
           </View>
         </Section>
 
-        <Section title="Privacy" tokens={t}>
+        <Section title="Privacy" icon={ShieldCheck} tokens={t}>
           <View style={[styles.card, { backgroundColor: t.surface2, borderColor: t.line }]}>
             <Text style={[styles.privacyText, { color: t.ink }]}>
               What happens to your voice: when you press the mic, your speech is sent to the VUGA
@@ -160,6 +199,49 @@ export function ProfileScreen() {
           </View>
         </Section>
 
+        {user && (
+          <Section title="Account" icon={ArrowLeft} tokens={t}>
+            <View style={[styles.card, { backgroundColor: t.surface2, borderColor: t.line }]}>
+              {user.fullName && (
+                <View style={styles.settingRow}>
+                  <Text style={[styles.settingLabel, { color: t.ink }]}>{user.fullName}</Text>
+                </View>
+              )}
+              {user.email && (
+                <View style={styles.settingRow}>
+                  <Text style={[styles.settingNote, { color: t.inkDim }]}>{user.email}</Text>
+                </View>
+              )}
+              {user.country && (
+                <View style={styles.settingRow}>
+                  <Text style={[styles.settingNote, { color: t.inkDim }]}>{user.country}</Text>
+                </View>
+              )}
+              <Pressable
+                onPress={() => {
+                  Alert.alert(
+                    "Log out",
+                    "Are you sure you want to log out?",
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      {
+                        text: "Log out",
+                        style: "destructive",
+                        onPress: () => void logout(),
+                      },
+                    ],
+                  );
+                }}
+                disabled={authLoading}
+                style={[styles.logoutButton, { backgroundColor: t.rustSoft, borderColor: t.rust }]}
+              >
+                <PhosphorIcon icon={ArrowLeft} size={16} color={t.rust} weight="bold" />
+                <Text style={[styles.logoutText, { color: t.rust }]}>Log out</Text>
+              </Pressable>
+            </View>
+          </Section>
+        )}
+
         <Text style={[styles.version, { color: t.inkDim }]}>VUGA v1.0.0</Text>
       </ScrollView>
     </SafeAreaView>
@@ -168,16 +250,21 @@ export function ProfileScreen() {
 
 function Section({
   title,
+  icon: SectionIcon,
   tokens,
   children,
 }: {
   title: string;
+  icon: typeof Palette;
   tokens: ReturnType<typeof useTheme>["tokens"];
   children: React.ReactNode;
 }) {
   return (
     <View style={styles.section}>
-      <Text style={[styles.sectionTitle, { color: tokens.inkDim }]}>{title}</Text>
+      <View style={styles.sectionHeader}>
+        <PhosphorIcon icon={SectionIcon} size={13} color={tokens.ochre} />
+        <Text style={[styles.sectionTitle, { color: tokens.inkDim }]}>{title}</Text>
+      </View>
       {children}
     </View>
   );
@@ -188,14 +275,19 @@ const styles = StyleSheet.create({
   content: { padding: SPACING.m, paddingBottom: SPACING.xl },
   title: { fontSize: TYPE.title, fontWeight: "800", marginBottom: SPACING.xs },
   section: { marginTop: SPACING.l },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: SPACING.s,
+  },
   sectionTitle: {
     fontSize: TYPE.tiny,
     fontWeight: "700",
-    letterSpacing: 1,
-    marginBottom: SPACING.s,
+    letterSpacing: TRACKING.wide,
   },
   card: {
-    borderRadius: 12,
+    borderRadius: RADII.card,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: SPACING.m,
     paddingVertical: SPACING.s,
@@ -206,11 +298,35 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 6,
   },
+  radioGroup: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  radioItem: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  radioDot: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+  },
+  radioLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
   settingLabel: { fontSize: TYPE.body },
   settingNote: { fontSize: TYPE.small, lineHeight: 18 },
-  staticTag: { fontSize: TYPE.tiny, fontWeight: "800", letterSpacing: 1 },
+  staticTag: { fontSize: TYPE.tiny, fontWeight: "800", letterSpacing: TRACKING.wide },
   input: {
-    borderRadius: 8,
+    borderRadius: RADII.card,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: SPACING.s,
     paddingVertical: 8,
@@ -220,6 +336,20 @@ const styles = StyleSheet.create({
     fontSize: TYPE.small,
     lineHeight: 19,
     marginBottom: SPACING.s,
+  },
+  logoutButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: SPACING.s,
+    borderRadius: RADII.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 10,
+    marginTop: SPACING.s,
+  },
+  logoutText: {
+    fontSize: TYPE.body,
+    fontWeight: "700",
   },
   version: {
     textAlign: "center",

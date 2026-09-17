@@ -1,7 +1,10 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
+import { PhosphorIcon } from "./PhosphorIcon";
+import { Chats, Sparkle } from "phosphor-react-native";
 import type { ThemeTokens } from "../theme/tokens";
+import { elevate } from "../theme/elevation";
 import { RADII, SPACING, TYPE } from "../theme/tokens";
 import type { CoachingInfo } from "../types";
 
@@ -32,11 +35,14 @@ export function CoachingTicket({ tokens, coaching }: { tokens: ThemeTokens; coac
         accessible
         accessibilityLabel={`Coaching. You typed ${coaching.wrong}. Say ${coaching.right} instead. ${coaching.tip}`}
       >
-        <Text style={[styles.line, { color: t.inkDim }]}>
-          {coaching.practicedBefore ? "You've kept this fix before" : "Coaching"}
-          {" — "}
-          {coaching.line}
-        </Text>
+        <View style={styles.mistakeHeader}>
+          <PhosphorIcon icon={Chats} size={14} color={t.ochre} />
+          <Text style={[styles.line, { color: t.inkDim }]}>
+            {coaching.practicedBefore ? "You've kept this fix before" : "Coaching"}
+            {" — "}
+            {coaching.line}
+          </Text>
+        </View>
         <TopicTag tokens={t} topic={coaching.topic} />
       </View>
     );
@@ -46,10 +52,13 @@ export function CoachingTicket({ tokens, coaching }: { tokens: ThemeTokens; coac
     <View
       accessible
       accessibilityLabel={`Coaching. ${coaching.line} Progress level in ${coaching.topic ?? "general"}: ${coaching.levelText ?? "just starting"}. ${coaching.tip}`}
-      style={[styles.ticket, { backgroundColor: t.surface3, borderColor: t.line }]}
+      style={[styles.ticket, { backgroundColor: t.card, borderColor: t.line }, elevate("card", t)]}
     >
       <View style={styles.body}>
-        <Text style={[styles.label, { color: t.inkDim }]}>COACHING</Text>
+        <View style={styles.headerRow}>
+          <PhosphorIcon icon={Sparkle} size={16} color={t.moss} />
+          <Text style={[styles.headerLabel, { color: t.inkDim }]}>COACHING</Text>
+        </View>
         <Text style={[styles.line, { color: t.ink }]}>{coaching.line}</Text>
         <Text style={[styles.level, { color: t.moss }]}>
           {coaching.topic ? `${coaching.topic.replace("-", " ")} — ` : ""}
@@ -58,7 +67,7 @@ export function CoachingTicket({ tokens, coaching }: { tokens: ThemeTokens; coac
         </Text>
         <Text style={[styles.tip, { color: t.inkDim }]}>{coaching.tip}</Text>
       </View>
-      <View style={[styles.perf, { backgroundColor: t.surface2 }]}>
+      <View style={[styles.perf, { backgroundColor: t.cardIn }]}>
         <View style={[styles.notch, { backgroundColor: t.surface, top: -6, left: -6 }]} />
         <View style={[styles.notch, { backgroundColor: t.surface, top: -6, right: -6 }]} />
         <View style={[styles.dash, { borderLeftColor: t.line }]} />
@@ -76,21 +85,18 @@ function TopicTag({ tokens, topic }: { tokens: ThemeTokens; topic?: string }) {
 }
 
 const styles = StyleSheet.create({
-  line: { fontSize: TYPE.small, lineHeight: 18, marginBottom: SPACING.xs },
+  line: { fontSize: TYPE.small, lineHeight: 18, marginBottom: SPACING.xs, flex: 1 },
+  mistakeHeader: { flexDirection: "row", alignItems: "flex-start", gap: 6 },
   topicTag: { fontSize: TYPE.tiny, marginTop: SPACING.xs },
   ticket: {
-    borderRadius: RADII.ticket,
+    borderRadius: RADII.card,
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     overflow: "hidden",
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
   },
   body: { flex: 1, padding: SPACING.m, gap: 2 },
-  label: { fontSize: TYPE.tiny, letterSpacing: 1, fontWeight: "700" },
+  headerRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: SPACING.xs },
+  headerLabel: { fontSize: TYPE.tiny, letterSpacing: 1.5, fontWeight: "700" },
   level: { fontSize: TYPE.small, fontWeight: "700" },
   tip: { fontSize: TYPE.small, lineHeight: 18 },
   perf: { width: 14, justifyContent: "center", alignItems: "center" },

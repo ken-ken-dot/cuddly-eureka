@@ -3,12 +3,17 @@ import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useTheme } from "../theme";
-import { SPACING, TYPE } from "../theme/tokens";
+import { RADII, SPACING, TYPE } from "../theme/tokens";
+import { elevate } from "../theme/elevation";
 import { Ticket } from "../components/Ticket";
 import { TriangleDivider } from "../components/TriangleDivider";
+import { EmptyState } from "../components/EmptyState";
 import { TopicBreakdown } from "../components/TopicBreakdown";
 import { useCorrections } from "../store/corrections";
 import { useTracking } from "../corrections/tracking";
+
+import { Ticket as TicketIcon, X } from "phosphor-react-native";
+import { PhosphorIcon } from "../components/PhosphorIcon";
 
 export function LearnScreen() {
   const { tokens: t } = useTheme();
@@ -44,12 +49,13 @@ export function LearnScreen() {
         contentContainerStyle={styles.list}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={[styles.emptyTitle, { color: t.ink }]}>No corrections kept yet</Text>
-            <Text style={[styles.emptyBody, { color: t.inkDim }]}>
-              When VUGA hears a word worth fixing on the Translate tab, it shows a ticket. Keep the
-              ones you want to practice and they'll live here.
-            </Text>
-            <View style={styles.note}>
+            <EmptyState
+              tokens={t}
+              icon={TicketIcon}
+              title="No corrections kept yet"
+              body="When VUGA hears a word worth fixing on the Translate tab, it shows a ticket. Keep the ones you want to practice and they'll live here."
+            />
+            <View style={[styles.note, { backgroundColor: t.surface2, borderColor: t.line }, elevate("card", t)]}>
               <Text style={[styles.noteText, { color: t.inkDim }]}>
                 A note on coverage: corrections come from a small, curated list of common
                 market-vendor mistakes — not a full grammar engine. A missing ticket doesn't mean
@@ -74,9 +80,9 @@ export function LearnScreen() {
               accessibilityLabel={`Remove correction: say ${item.right} instead of ${item.wrong}`}
               onPress={() => remove(item.id)}
               hitSlop={10}
-              style={[styles.remove, { borderColor: t.line }]}
+              style={[styles.remove, { backgroundColor: t.surface2, borderColor: t.line }]}
             >
-              <Text style={[styles.removeText, { color: t.inkDim }]}>✕</Text>
+              <PhosphorIcon icon={X} size={14} color={t.inkDim} weight="bold" />
             </Pressable>
           </View>
         )}
@@ -93,15 +99,13 @@ const styles = StyleSheet.create({
   title: { fontSize: TYPE.title, fontWeight: "800" },
   subtitle: { fontSize: TYPE.small, lineHeight: 18, marginBottom: SPACING.xs },
   list: { padding: SPACING.m },
-  empty: { alignItems: "center", gap: SPACING.s, paddingTop: SPACING.xl },
-  emptyTitle: { fontSize: TYPE.h2, fontWeight: "700", textAlign: "center" },
-  emptyBody: { fontSize: TYPE.body, lineHeight: 22, textAlign: "center", paddingHorizontal: SPACING.l },
+  empty: { alignItems: "center", gap: SPACING.m, paddingTop: SPACING.xl },
   note: {
-    marginTop: SPACING.m,
-    borderRadius: 12,
+    alignSelf: "stretch",
+    marginTop: SPACING.s,
+    borderRadius: RADII.card,
     borderWidth: StyleSheet.hairlineWidth,
     padding: SPACING.m,
-    backgroundColor: "rgba(0,0,0,0.06)",
   },
   noteText: { fontSize: TYPE.small, lineHeight: 18 },
   row: {
@@ -119,5 +123,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  removeText: { fontSize: TYPE.small, fontWeight: "700" },
+
 });

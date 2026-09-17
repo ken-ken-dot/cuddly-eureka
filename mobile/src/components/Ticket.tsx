@@ -1,7 +1,11 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { PhosphorIcon } from "./PhosphorIcon";
+import { Sparkle, CheckCircle } from "phosphor-react-native";
 import type { ThemeTokens } from "../theme/tokens";
+import { elevate } from "../theme/elevation";
+import { hapticKept } from "../theme/haptics";
 import { RADII, SPACING, TYPE } from "../theme/tokens";
 
 interface TicketProps {
@@ -15,8 +19,9 @@ interface TicketProps {
 
 /**
  * A correction rendered as a punched ticket stub — the brand element for
- * corrections (never a chat bubble). Perforation line separates the stub
- * (Keep action) from the body.
+ * corrections (never a chat bubble), now with a signature icon header so the
+ * feature reads as a deliberate product moment. Perforation line separates
+ * the stub (Keep action) from the body.
  */
 export function Ticket({ tokens, wrong, right, tip, kept = false, onKeep }: TicketProps) {
   const t = tokens;
@@ -24,29 +29,30 @@ export function Ticket({ tokens, wrong, right, tip, kept = false, onKeep }: Tick
     <View
       accessible
       accessibilityLabel={`Correction. You said ${wrong}. Say ${right} instead. ${tip}`}
-      style={[
-        styles.ticket,
-        { backgroundColor: t.surface3, borderColor: t.line, shadowColor: "#000" },
-      ]}
+      style={[styles.ticket, { backgroundColor: t.card, borderColor: t.line }, elevate("card", t)]}
     >
       <View style={styles.body}>
+        <View style={styles.headerRow}>
+          <PhosphorIcon icon={kept ? CheckCircle : Sparkle} size={16} color={kept ? t.moss : t.ochre} />
+          <Text style={[styles.headerLabel, { color: t.inkDim }]}>
+            {kept ? "KEPT — WORD TO FIX" : "WORD TO FIX"}
+          </Text>
+        </View>
         <View style={styles.row}>
           <Text style={[styles.label, { color: t.inkDim }]}>YOU SAID</Text>
           <Text style={[styles.wrong, { color: t.rust }]}>{wrong}</Text>
         </View>
         <View style={styles.row}>
-          <Text style={[styles.label, { color: t.inkDim }]}>SAY</Text>
+          <Text style={[styles.label, { color: t.inkDim }]}>SAY INSTEAD</Text>
           <Text style={[styles.right, { color: t.moss }]}>{right}</Text>
         </View>
-        {tip ? (
-          <Text style={[styles.tip, { color: t.inkDim }]}>{tip}</Text>
-        ) : null}
+        {tip ? <Text style={[styles.tip, { color: t.inkDim }]}>{tip}</Text> : null}
       </View>
 
-      <View style={[styles.perf, { backgroundColor: t.surface2 }]}>
+      <View style={[styles.perf, { backgroundColor: t.cardIn }]}>
         <View style={[styles.notch, { backgroundColor: t.surface, top: -6, left: -6 }]} />
         <View style={[styles.notch, { backgroundColor: t.surface, top: -6, right: -6 }]} />
-        <View style={[styles.dash, { borderBottomColor: t.line }]} />
+        <View style={[styles.dash, { borderLeftColor: t.line }]} />
       </View>
 
       <Pressable
@@ -55,10 +61,15 @@ export function Ticket({ tokens, wrong, right, tip, kept = false, onKeep }: Tick
         accessibilityLabel={kept ? "Correction saved" : `Keep correction: say ${right} instead of ${wrong}`}
         accessibilityState={{ disabled: !!kept, selected: !!kept }}
         disabled={kept}
-        onPress={onKeep}
+        onPress={() => {
+          if (!kept) {
+            hapticKept();
+            onKeep?.();
+          }
+        }}
         style={({ pressed }) => [
           styles.stub,
-          { backgroundColor: kept ? t.mossSoft : t.rustSoft, opacity: pressed ? 0.8 : 1 },
+          { backgroundColor: kept ? t.mossSoft : t.rustSoft, opacity: pressed && !kept ? 0.85 : 1 },
         ]}
       >
         <Text style={[styles.stubText, { color: t.ink }]}>
@@ -71,18 +82,26 @@ export function Ticket({ tokens, wrong, right, tip, kept = false, onKeep }: Tick
 
 const styles = StyleSheet.create({
   ticket: {
-    borderRadius: RADII.ticket,
+    borderRadius: RADII.card,
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     overflow: "hidden",
-    elevation: 2,
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
   },
   body: {
     flex: 1,
     padding: SPACING.m,
+    gap: 2,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: SPACING.s,
+  },
+  headerLabel: {
+    fontSize: TYPE.tiny,
+    letterSpacing: 1.5,
+    fontWeight: "700",
   },
   row: {
     flexDirection: "row",
@@ -94,7 +113,7 @@ const styles = StyleSheet.create({
     fontSize: TYPE.tiny,
     letterSpacing: 1,
     fontWeight: "700",
-    width: 64,
+    width: 84,
   },
   wrong: {
     fontSize: TYPE.body,
