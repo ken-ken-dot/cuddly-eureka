@@ -43,16 +43,56 @@ export interface Turn {
   at: number;
 }
 
-export type Direction = "rw-zh" | "zh-rw";
+/**
+ * Translation pairs. The two V1 values stay first and behave exactly as
+ * before (LanguageToggle renders them unchanged); the multilingual brief adds
+ * four more verified pairs. Pair codes are source-target using the proxy's
+ * translation codes (rw, zh-CN, en, de).
+ */
+export type Direction = "rw-zh" | "zh-rw" | "rw-en" | "en-rw" | "rw-de" | "de-rw" | "en-de" | "de-en";
 
-export const DIRECTIONS: readonly Direction[] = ["rw-zh", "zh-rw"];
+export const DIRECTIONS: readonly Direction[] = [
+  "rw-zh",
+  "zh-rw",
+  "rw-en",
+  "en-rw",
+  "rw-de",
+  "de-rw",
+  "en-de",
+  "de-en",
+];
+
+/** Translation-API codes per pair side (match backend normalizeLanguageCode). */
+const CODE_FOR_LABEL: Readonly<Record<string, string>> = {
+  rw: "rw",
+  zh: "zh-CN",
+  en: "en",
+  de: "de",
+};
+
+/** Native names shown in the picker, keyed by pair-side label. */
+export const LANGUAGE_NAMES: Readonly<Record<string, string>> = {
+  rw: "Kinyarwanda",
+  zh: "普通话",
+  en: "English",
+  de: "Deutsch",
+};
 
 export function directionLanguages(d: Direction): { source: string; target: string } {
-  return d === "rw-zh" ? { source: "rw", target: "zh-CN" } : { source: "zh-CN", target: "rw" };
+  const [s = "", t = ""] = d.split("-");
+  return { source: CODE_FOR_LABEL[s] ?? s, target: CODE_FOR_LABEL[t] ?? t };
+}
+
+/** Short side label used by the picker pills (KIN / ZH / EN / DE). */
+export function directionSideLabel(side: string): string {
+  return { rw: "KIN", zh: "ZH", en: "EN", de: "DE" }[side] ?? side.toUpperCase();
 }
 
 export function directionLabel(d: Direction): string {
-  return d === "rw-zh" ? "Kinyarwanda → 普通话" : "普通话 → Kinyarwanda";
+  if (d === "rw-zh") return "Kinyarwanda → 普通话";
+  if (d === "zh-rw") return "普通话 → Kinyarwanda";
+  const [s = "", t = ""] = d.split("-");
+  return `${LANGUAGE_NAMES[s] ?? s} → ${LANGUAGE_NAMES[t] ?? t}`;
 }
 
 /** True when the proxy is running with placeholder/mock responses (not real translation). */

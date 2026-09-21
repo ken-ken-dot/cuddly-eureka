@@ -13,6 +13,14 @@ that would ship API keys inside the compiled app.
 | POST | `/api/transcribe` | `{ audio, languageCode }` (audio = base64) | `{ text, lang, confidence, provider, mock }` |
 | POST | `/api/translate` | `{ text, sourceLang, targetLang }` | `{ translated, provider, mock }` |
 | POST | `/api/tts` | `{ text, languageCode }` | `{ audioBase64, mimeType, provider, mock }` |
+| POST | `/api/auth/signup` | `{ email, password }` | `{ accessToken, refreshToken }` |
+| POST | `/api/auth/login` | `{ email, password }` | `{ accessToken, refreshToken }` |
+| POST | `/api/auth/refresh` | `{ refreshToken }` | `{ accessToken, refreshToken }` (rotates) |
+| POST | `/api/auth/logout` | `{ refreshToken }` | `{ ok: true }` (revokes server-side) |
+| GET | `/api/corrections` | Bearer access token | `{ corrections: [...] }` |
+| POST | `/api/corrections` | Bearer token, `{ corrections: [...] }` | `{ corrections: [{ id, localId }] }` |
+| GET | `/api/settings` | Bearer access token | `{ settings }` |
+| PUT | `/api/settings` | Bearer token, `{ theme?, languagePair? }` | `{ settings }` |
 
 Error responses always have the shape
 `{ error: { code, message } }` with human-readable `message` copy — the app
@@ -25,6 +33,37 @@ cp .env.example .env      # then edit .env
 npm install
 npm run dev               # tsx watch, http://localhost:8787
 ```
+
+### Auth + sync (hand-rolled, plain PostgreSQL)
+
+Accounts are built by hand on this proxy — no managed-auth vendor. We own
+password hashing, token issuance, refresh rotation, and session revocation.
+
+```bash
+# 1. Put these in backend/.env (never committed):
+#      DATABASE_URL=postgres://…   (Neon recommended: https://neon.tech)
+#      JWT_SECRET=<openssl rand -hex 32>
+npm run db:check          # confirm connectivity (step 1 of the build order)
+npm run db:schema         # create tables (idempotent, backend/sql/schema.sql)
+DATABASE_URL=… JWT_SECRET=… npm run test:auth   # two-account cross-access test
+```
+
+The security model (there is no RLS — the app IS the enforcement layer):
+
+- Access tokens are 15-minute JWTs; `requireAuth` verifies the signature and
+  attaches `req.userId`. Every query touching `corrections` or
+  `user_settings` is scoped `where user_id = <req.userId>` — that id comes
+  ONLY from the verified JWT, never from a client-supplied field.
+- Refresh tokens are random 32-byte values stored as SHA-256 hashes, rotated
+  on every use; reuse of a rotated token revokes the whole family (stolen-
+  token signal). Logout flips `revoked`, which is what makes it server-side.
+- Passwords are bcrypt hashes (never plaintext); unknown-email and wrong-
+  password login attempts return an identical response.
+
+`test/auth-cross-access.test.ts` boots the real app, creates two accounts,
+and proves B cannot read or write A's data, forged tokens fail, refresh is
+single-use, and logout revokes. It is the RLS-equivalent gate: run it before
+calling auth done.
 
 ### Modes
 

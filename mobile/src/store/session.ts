@@ -27,6 +27,14 @@ interface SessionState {
   /** True once the proxy reports placeholder/mock responses (no API keys). */
   mockMode: boolean;
 
+  // --- Live real-time mode (multilingual brief Section 4) — additive state.
+  // The V1 record->transcribe->translate flow above is untouched; these fields
+  // are only driven by the LIVE toggle in TranslateScreen.
+  /** True while the WebSocket relay session is open and streaming. */
+  live: boolean;
+  /** Interim transcript currently being spoken (rendered under the mic). */
+  livePartial: string;
+
   setDirection: (d: Direction) => void;
   setListening: (v: boolean) => void;
   setError: (e: SessionError | null) => void;
@@ -34,6 +42,10 @@ interface SessionState {
   submitUtterance: (audioBase64: string, direction: Direction) => Promise<void>;
   submitText: (text: string, direction: Direction) => Promise<void>;
   markKept: (turnId: string, recordId: string) => void;
+  /** Append one completed live segment as a normal turn (with corrections). */
+  pushLiveTurn: (original: string, translated: string, direction: Direction) => void;
+  setLive: (v: boolean) => void;
+  setLivePartial: (text: string) => void;
   reset: () => void;
 }
 
@@ -61,6 +73,8 @@ export const useSession = create<SessionState>((set) => ({
   error: null,
   lastTurnId: null,
   mockMode: false,
+  live: false,
+  livePartial: "",
 
   setDirection: (d) => set({ direction: d, error: null }),
   setListening: (v) => set({ listening: v }),
@@ -72,11 +86,43 @@ export const useSession = create<SessionState>((set) => ({
       turns: s.turns.map((t) => (t.id === turnId ? { ...t, keptId: recordId } : t)),
     })),
 
+  // Live mode: a completed relay segment lands as the SAME Turn shape the
+  // transcript already renders — corrections fire exactly as in V1 whenever
+  // the source language is Kinyarwanda.
+  pushLiveTurn: (original, translated, direction) => {
+    const { source, target } = directionLanguages(direction);
+    const speaker: Turn["speaker"] = source === "rw" ? "you" : "them";
+    const hit = source === "rw" ? findCorrection(original) : null;
+    const turn: Turn = {
+      id: nextId(),
+      speaker,
+      original,
+      translated,
+      correction: hit ? { wrong: hit.wrong, right: hit.right, tip: hit.tip, entryId: hit.entryId } : undefined,
+      topic: hit?.topic,
+      at: Date.now(),
+    };
+    if (speaker === "you") {
+      useTracking
+        .getState()
+        .recordTurn({ turnId: turn.id, hadMistake: Boolean(hit), entryId: hit?.entryId });
+      const report = useTracking.getState().recompute();
+      evaluateLevelCleared(report);
+    }
+    set((s) => ({ turns: [...s.turns, turn], lastTurnId: turn.id, livePartial: "" }));
+  },
+
+  setLive: (v) => set({ live: v, livePartial: "" }),
+  setLivePartial: (text) => set({ livePartial: text }),
+
   reset: () => set({ turns: [], error: null, lastTurnId: null }),
 
   submitUtterance: async (audioBase64, direction) => {
     const { source, target } = directionLanguages(direction);
-    const userSpeaks = direction === "rw-zh" ? "rw" : "zh-CN";
+    // Multilingual brief: the vendor ("you") always speaks the pair's source
+    // language. rw-zh resolves to the exact V1 values, so the original flow
+    // is unchanged; new pairs simply carry their own source/target codes.
+    const userSpeaks = source;
     try {
       set({ submitting: true });
       const stt = await transcribe(audioBase64, userSpeaks);
@@ -90,8 +136,9 @@ export const useSession = create<SessionState>((set) => ({
       }
       const mt = await translate(text, source, target);
       const hit = userSpeaks === "rw" ? findCorrection(text) : null;
-      // rw-zh: the vendor (user) is speaking. zh-rw: the customer speaks.
-      const speaker: Turn["speaker"] = direction === "rw-zh" ? "you" : "them";
+      // Vendor (user) is speaking whenever Kinyarwanda is the source —
+      // identical to V1's rw-zh rule, now applied across all four languages.
+      const speaker: Turn["speaker"] = source === "rw" ? "you" : "them";
       const turn: Turn = {
         id: nextId(),
         speaker,

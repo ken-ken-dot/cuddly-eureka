@@ -6,7 +6,7 @@
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const testFiles = ["proficiency.test.ts"];
+const testFiles = ["proficiency.test.ts", "insights.test.ts", "directions.test.ts"];
 
 let failed = false;
 for (const file of testFiles) {

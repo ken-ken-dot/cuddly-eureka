@@ -12,8 +12,12 @@ import { TopicBreakdown } from "../components/TopicBreakdown";
 import { useCorrections } from "../store/corrections";
 import { useTracking } from "../corrections/tracking";
 
-import { Ticket as TicketIcon, X } from "phosphor-react-native";
+import { Ticket as TicketIcon, X, GraduationCap } from "phosphor-react-native";
 import { PhosphorIcon } from "../components/PhosphorIcon";
+import { WeakPointsCard } from "../components/WeakPointsCard";
+import { WeeklyTrendCard } from "../components/WeeklyTrendCard";
+import { PracticeModal } from "./PracticeModal";
+import { useAccount } from "../store/account";
 
 export function LearnScreen() {
   const { tokens: t } = useTheme();
@@ -21,6 +25,11 @@ export function LearnScreen() {
   const remove = useCorrections((s) => s.remove);
   const report = useTracking((s) => s.report);
   const recompute = useTracking((s) => s.recompute);
+  // Learning brief §6: weak points + weekly trend expand this screen's progress
+  // card; Practice is an opt-in session entered from here (never a new tab).
+  const [practiceOpen, setPracticeOpen] = React.useState(false);
+  const user = useAccount((s) => s.user);
+  const openAuthSheet = useAccount((s) => s.openAuthSheet);
 
   // V3: keep the proficiency report fresh as kept corrections change. The
   // existing V1 list below is untouched.
@@ -40,6 +49,31 @@ export function LearnScreen() {
         <View style={styles.progress}>
           <Text style={[styles.progressLabel, { color: t.inkDim }]}>PROGRESS</Text>
           {report ? <TopicBreakdown report={report} tokens={t} /> : null}
+          {/* Learning brief §2/§6: ranked weak points — works signed-out too. */}
+          <WeakPointsCard corrections={corrections} tokens={t} />
+          {/* Learning brief §2/§6: progress over time, honest about sparse data. */}
+          <WeeklyTrendCard corrections={corrections} tokens={t} />
+          {/* Practice entry point (§6): a session you enter, not a destination. */}
+          <Pressable
+            onPress={() => (user ? setPracticeOpen(true) : openAuthSheet("signup"))}
+            style={[styles.practiceCard, { backgroundColor: t.mossSoft, borderColor: t.moss }, elevate("card", t)]}
+            accessibilityRole="button"
+            accessibilityLabel={
+              user
+                ? "Start a practice session with the corrections you kept"
+                : "Sign in to save your progress and get proper practice"
+            }
+          >
+            <PhosphorIcon icon={GraduationCap} size={20} color={t.moss} weight="fill" />
+            <View style={styles.practiceTextWrap}>
+              <Text style={[styles.practiceTitle, { color: t.ink }]}>Practice</Text>
+              <Text style={[styles.practiceSubtitle, { color: t.inkDim }]}>
+                {user
+                  ? "A quick drill from the mistakes you kept."
+                  : "Sign in to save your progress and get proper practice."}
+              </Text>
+            </View>
+          </Pressable>
         </View>
       </View>
 
@@ -87,6 +121,8 @@ export function LearnScreen() {
           </View>
         )}
       />
+      {/* Practice drill flow — a modal session, not a tab (learning brief §6). */}
+      <PracticeModal visible={practiceOpen} onClose={() => setPracticeOpen(false)} />
     </SafeAreaView>
   );
 }
@@ -95,6 +131,18 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   header: { paddingHorizontal: SPACING.m, paddingTop: SPACING.s, gap: 4 },
   progress: { marginTop: SPACING.s, gap: 6 },
+  practiceCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.s,
+    borderRadius: RADII.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: SPACING.m,
+    paddingVertical: SPACING.s,
+  },
+  practiceTextWrap: { flex: 1, gap: 2 },
+  practiceTitle: { fontSize: TYPE.body, fontWeight: "800" },
+  practiceSubtitle: { fontSize: TYPE.small, lineHeight: 17 },
   progressLabel: { fontSize: TYPE.tiny, fontWeight: "700", letterSpacing: 1 },
   title: { fontSize: TYPE.title, fontWeight: "800" },
   subtitle: { fontSize: TYPE.small, lineHeight: 18, marginBottom: SPACING.xs },

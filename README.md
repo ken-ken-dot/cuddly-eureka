@@ -1,8 +1,9 @@
 # VUGA
 
 Kinyarwanda ⇄ Mandarin speech translation with correction coaching, built for
-market vendors. Free for individual users: no ads, no paywalls, no accounts in
-V1.
+market vendors — now extended additively with real-time translation across
+four verified languages: Kinyarwanda, English, German, Mandarin. Free for
+individual users: no ads, no paywalls, no accounts required.
 
 ## Layout
 
@@ -16,7 +17,7 @@ corrections.json    Shared curated mistake list (single source of truth for back
 
 ```bash
 npm run setup     # installs both workspaces
-npm run proxy     # Express proxy on http://localhost:8787
+npm run proxy     # Express proxy on http://localhost:8787 (+ WS relay on /api/realtime)
 npm run app       # Expo dev server — scan the QR with Expo Go
 ```
 
@@ -46,6 +47,67 @@ Two hard-won details baked into the code:
 2. No two-hop Kinyarwanda→English→Mandarin pipeline is needed — direct
    `rw ⇄ zh-CN` is supported. Its *quality* on real vendor speech still needs
    a live accuracy pass (see below).
+
+## Multilingual real-time status (Section 9 definition of done)
+
+The multilingual brief's build order was followed. What is **done and
+verified in this environment** (mock mode — no Google Cloud credentials
+exist yet, same honest caveat as V1):
+
+- [x] Language catalog extended to the four verified languages, V1 pair
+      first and untouched (`backend/src/languages.ts`, unit-tested)
+- [x] One-credential setup: `GOOGLE_APPLICATION_CREDENTIALS` (key file),
+      `GOOGLE_APPLICATION_CREDENTIALS_JSON` (inline), and `GCP_PROJECT_ID`
+      aliases all accepted — no second provider, no per-language keys
+- [x] Explicit STT region routing table (Section 3): `rw` → `eu` region,
+      `short` model; `en`/`de`/`zh` → `global`, `chirp_3` model. Note the
+      STT code for Mandarin is `cmn-Hans-CN`, not `zh-CN` — verified against
+      Google's supported-languages page (Sept 2026)
+- [x] gRPC `StreamingRecognize` wrapper with interim results
+      (`backend/src/google/streaming.ts`) — lazy-loaded, additive, REST
+      batch path untouched
+- [x] WebSocket relay at `/api/realtime` (Section 4): client PCM up,
+      partials/finals + translations down, finals translated through the
+      same `runTranslate` as REST (identical mock behavior + error copy)
+- [x] Mock-mode relay path so the full client flow is exercisable without
+      keys; smoke script proves the round-trip end to end
+- [x] Language picker (Section 5): source/target picker limited to the four
+      verified pairs, same pill visual language, Kinyarwanda⇄Mandarin the
+      default and unchanged
+- [x] Picker wired to the relay: an opt-in LIVE toggle on the Translate
+      screen routes the mic through the WS relay — partials render live,
+      finals land as normal transcript turns with corrections firing exactly
+      as in V1 whenever Kinyarwanda is the source. Default mode is unchanged
+      (record-once → translate), and `/api/languages` now lists all four
+      verified codes with the V1 shape intact
+- [x] `react-native-live-audio-stream` installed with the Section 4a config
+      (16 kHz / mono / 16-bit / VOICE_RECOGNITION / 4096 buffer) and an
+      automatic `expo-av` chunked fallback so the app still runs in Expo Go
+      before `expo prebuild`
+- [x] Pair-aware sync (Section 6): uploads derive `language_pair` from each
+      record's actual languages (V1 records still produce `rw-zh`); pulls
+      resolve any pair back into per-record languages — no learning-portal
+      logic changed, per the brief's reuse rule
+- [x] Backend `tsc --noEmit` clean; backend 8/8 + mobile 24/24 tests pass;
+      mock-mode smoke: REST regression surface + new pairs + WS round-trip
+      all green (`backend/scripts/smoke-realtime.ts`)
+
+**Cannot be checked here — explicit per the brief's rule:**
+
+- [ ] **Live STT/MT streaming for all four languages.** Needs a real
+      service-account key with Speech Client + Translation API User roles
+      and both APIs enabled. Then run:
+      `npm run stt:stream --workspace backend -- --audio sample.wav --lang rw`
+      (this specifically proves the `eu`-routed Kinyarwanda path before
+      trusting it) — repeat with `en` and `de`.
+- [ ] **`expo prebuild` + physical-device pass.** The native audio module
+      requires a dev build; until then the app runs in Expo Go via the
+      `expo-av` fallback (chunked, higher latency — real-time feel is not
+      yet representative).
+- [ ] **Billing alerts** in Google Cloud console (Billing → Budgets &
+      alerts) — a console action, not code.
+- [ ] **Full signed-in regression on a physical device** across all four
+      pairs.
 
 ## Honest V1 status (definition of done)
 

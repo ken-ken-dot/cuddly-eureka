@@ -17,46 +17,23 @@ import { useTheme } from "../theme";
 import { RADII, SPACING, TRACKING, TYPE } from "../theme/tokens";
 import { elevate } from "../theme/elevation";
 import { Logo } from "../components/Logo";
-import { CountryPicker, findCountry, type Country } from "../components/CountryPicker";
-import { GoogleButton } from "../components/GoogleButton";
-import { useAuth, type AuthError } from "../store/auth";
-import type { SignupParams } from "../api/auth";
+import { AuthBackgroundIcons } from "../components/AuthBackgroundIcons";
+import { useAccount } from "../store/account";
 
 // ---------------------------------------------------------------------------
 // Validation
 // ---------------------------------------------------------------------------
 
 interface FieldErrors {
-  fullName?: string;
-  phone?: string;
   email?: string;
-  country?: string;
   password?: string;
 }
 
-function validateField(
-  name: keyof FieldErrors,
-  value: string,
-  country: Country | null,
-): string | undefined {
+function validateField(name: keyof FieldErrors, value: string): string | undefined {
   switch (name) {
-    case "fullName":
-      if (!value.trim()) return "Name is required.";
-      if (value.trim().length < 2) return "Name must be at least 2 characters.";
-      return undefined;
-    case "phone":
-      if (!value.trim()) return "Phone number is required.";
-      // Basic digit check — Supabase validates the E.164 format server-side.
-      const digits = value.replace(/[^\d]/g, "");
-      if (digits.length < 7) return "Phone number is too short.";
-      if (digits.length > 15) return "Phone number is too long.";
-      return undefined;
     case "email":
       if (!value.trim()) return "Email address is required.";
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) return "Enter a valid email address.";
-      return undefined;
-    case "country":
-      if (!country) return "Please select your country.";
       return undefined;
     case "password":
       if (!value) return "Password is required.";
@@ -71,16 +48,23 @@ function validateField(
 
 interface SignupScreenProps {
   onSwitchToLogin: () => void;
+  onDismiss: () => void;
 }
 
-export function SignupScreen({ onSwitchToLogin }: SignupScreenProps) {
+export function SignupScreen({ onSwitchToLogin, onDismiss }: SignupScreenProps) {
   const { tokens: t } = useTheme();
-  const { signup, loading, error, clearError } = useAuth();
+  const { signup, loading, error, migration, clearError } = useAccount();
 
-  const [fullName, setFullName] = useState("");
-  const [phone, setPhone] = useState("");
+  /** Same tone mapping as LoginScreen: rust = user-fixable, ochre = setup
+   *  (missing server config), dim = network/server faults. */
+  const errorTone: "rust" | "ochre" | "dim" =
+    error?.kind === "AUTH_NOT_CONFIGURED"
+      ? "ochre"
+      : error?.kind === "NETWORK" || error?.kind === "TIMEOUT" || error?.kind === "SERVER"
+        ? "dim"
+        : "rust";
+
   const [email, setEmail] = useState("");
-  const [country, setCountry] = useState<Country | null>(null);
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
@@ -102,50 +86,38 @@ export function SignupScreen({ onSwitchToLogin }: SignupScreenProps) {
   const handleBlur = useCallback(
     (name: keyof FieldErrors) => {
       setTouched((prev) => ({ ...prev, [name]: true }));
-      const value = name === "country" ? "" : name === "password" ? password : name === "fullName" ? fullName : name === "phone" ? phone : email;
-      const err = validateField(name, value, country);
+      const value = name === "password" ? password : email;
+      const err = validateField(name, value);
       setErrors((prev) => ({ ...prev, [name]: err }));
     },
-    [fullName, phone, email, country, password],
+    [email, password],
   );
 
   const validateAll = useCallback((): boolean => {
     const newErrors: FieldErrors = {
-      fullName: validateField("fullName", fullName, country),
-      phone: validateField("phone", phone, country),
-      email: validateField("email", email, country),
-      country: validateField("country", "", country),
-      password: validateField("password", password, country),
+      email: validateField("email", email),
+      password: validateField("password", password),
     };
     setErrors(newErrors);
-    setTouched({ fullName: true, phone: true, email: true, country: true, password: true });
+    setTouched({ email: true, password: true });
     const hasError = Object.values(newErrors).some(Boolean);
     if (hasError) triggerShake();
     return !hasError;
-  }, [fullName, phone, email, country, password, triggerShake]);
+  }, [email, password, triggerShake]);
 
   const handleSignup = useCallback(async () => {
     clearError();
     if (!validateAll()) return;
-
-    const dialCode = country?.dialCode ?? "";
-    const fullPhone = phone.startsWith("+") ? phone : `${dialCode}${phone}`;
-
-    await signup({
-      fullName: fullName.trim(),
-      phone: fullPhone,
-      email: email.trim().toLowerCase(),
-      country: country?.code ?? "",
-      password,
-    });
-  }, [fullName, phone, email, country, password, signup, clearError, validateAll]);
-
-  const handleGooglePress = useCallback(() => {
-    // Placeholder — Google OAuth not yet wired.
-  }, []);
+    // Store.signup performs the loud-safe local-history backup (brief §6);
+    // on success the parent unmounts this screen.
+    const ok = await signup(email.trim().toLowerCase(), password);
+    if (ok) onDismiss();
+  }, [email, password, signup, clearError, validateAll, onDismiss]);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: t.surface }]} edges={["bottom"]}>
+      {/* Decorative background glyphs — non-interactive, behind everything. */}
+      <AuthBackgroundIcons />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -160,14 +132,30 @@ export function SignupScreen({ onSwitchToLogin }: SignupScreenProps) {
             <Logo size={40} ochre={t.ochre} rust={t.rust} />
             <Text style={[styles.title, { color: t.ink }]}>Create account</Text>
             <Text style={[styles.subtitle, { color: t.inkDim }]}>
-              Start translating Kinyarwanda ↔ Mandarin
+              Back up your Learn history and take it to any device
             </Text>
           </View>
 
-          {/* Error banner */}
+          {/* Error banner — tone reflects the failure family (see errorTone). */}
           {error && (
-            <View style={[styles.errorBanner, { backgroundColor: t.rustSoft, borderColor: t.rust }]}>
-              <Text style={[styles.errorText, { color: t.rust }]}>{error.message}</Text>
+            <View
+              style={[
+                styles.errorBanner,
+                errorTone === "rust" && { backgroundColor: t.rustSoft, borderColor: t.rust },
+                errorTone === "ochre" && { backgroundColor: t.card, borderColor: t.ochre },
+                errorTone === "dim" && { backgroundColor: t.surface2, borderColor: t.line },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.errorText,
+                  errorTone === "rust" && { color: t.rust },
+                  errorTone === "ochre" && { color: t.ochre },
+                  errorTone === "dim" && { color: t.inkDim },
+                ]}
+              >
+                {error.message}
+              </Text>
               {error.kind === "EMAIL_EXISTS" && (
                 <Pressable onPress={onSwitchToLogin}>
                   <Text style={[styles.errorLink, { color: t.ochre }]}>Log in instead</Text>
@@ -176,63 +164,14 @@ export function SignupScreen({ onSwitchToLogin }: SignupScreenProps) {
             </View>
           )}
 
+          {/* Reassurance: local history is never lost, even if backup fails. */}
+          <Text style={[styles.reassure, { color: t.inkDim }]}>
+            Your corrections stay on this device either way. Creating an account adds a backup you
+            can restore anywhere.
+          </Text>
+
           {/* Form */}
           <Animated.View style={{ transform: [{ translateX: shakeAnim }] }}>
-            <View style={styles.field}>
-              <Text style={[styles.label, { color: t.inkDim }]}>Full name</Text>
-              <TextInput
-                value={fullName}
-                onChangeText={setFullName}
-                onBlur={() => handleBlur("fullName")}
-                placeholder="Full name"
-                placeholderTextColor={t.inkDim}
-                autoCapitalize="words"
-                autoCorrect={false}
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: t.surface3,
-                    borderColor: touched.fullName && errors.fullName ? t.rust : t.line,
-                    color: t.ink,
-                  },
-                ]}
-              />
-              {touched.fullName && errors.fullName && (
-                <Text style={[styles.fieldError, { color: t.rust }]}>{errors.fullName}</Text>
-              )}
-            </View>
-
-            <View style={styles.field}>
-              <Text style={[styles.label, { color: t.inkDim }]}>Phone number</Text>
-              <View style={styles.phoneRow}>
-                <View style={styles.dialCodeWrap}>
-                  <Text style={[styles.dialCodeText, { color: t.ink }]}>
-                    {country ? `${country.flag} ${country.dialCode}` : "+250"}
-                  </Text>
-                </View>
-                <TextInput
-                  value={phone}
-                  onChangeText={setPhone}
-                  onBlur={() => handleBlur("phone")}
-                  placeholder="Phone number"
-                  placeholderTextColor={t.inkDim}
-                  keyboardType="phone-pad"
-                  style={[
-                    styles.input,
-                    styles.phoneInput,
-                    {
-                      backgroundColor: t.surface3,
-                      borderColor: touched.phone && errors.phone ? t.rust : t.line,
-                      color: t.ink,
-                    },
-                  ]}
-                />
-              </View>
-              {touched.phone && errors.phone && (
-                <Text style={[styles.fieldError, { color: t.rust }]}>{errors.phone}</Text>
-              )}
-            </View>
-
             <View style={styles.field}>
               <Text style={[styles.label, { color: t.inkDim }]}>Email address</Text>
               <TextInput
@@ -259,25 +198,13 @@ export function SignupScreen({ onSwitchToLogin }: SignupScreenProps) {
             </View>
 
             <View style={styles.field}>
-              <Text style={[styles.label, { color: t.inkDim }]}>Country</Text>
-              <CountryPicker
-                value={country}
-                onSelect={setCountry}
-                placeholder="Country"
-              />
-              {touched.country && errors.country && (
-                <Text style={[styles.fieldError, { color: t.rust }]}>{errors.country}</Text>
-              )}
-            </View>
-
-            <View style={styles.field}>
               <Text style={[styles.label, { color: t.inkDim }]}>Password</Text>
               <View style={styles.passwordWrap}>
                 <TextInput
                   value={password}
                   onChangeText={setPassword}
                   onBlur={() => handleBlur("password")}
-                  placeholder="Password"
+                  placeholder="At least 8 characters"
                   placeholderTextColor={t.inkDim}
                   secureTextEntry={!showPassword}
                   style={[
@@ -320,19 +247,14 @@ export function SignupScreen({ onSwitchToLogin }: SignupScreenProps) {
             {loading ? (
               <ActivityIndicator color={t.ink} size="small" />
             ) : (
-              <Text style={[styles.submitText, { color: t.surface }]}>Sign up</Text>
+              <Text style={[styles.submitText, { color: t.surface }]}>Create account</Text>
             )}
           </Pressable>
 
-          {/* Divider */}
-          <View style={styles.dividerRow}>
-            <View style={[styles.dividerLine, { backgroundColor: t.line }]} />
-            <Text style={[styles.dividerText, { color: t.inkDim }]}>or</Text>
-            <View style={[styles.dividerLine, { backgroundColor: t.line }]} />
-          </View>
-
-          {/* Google placeholder */}
-          <GoogleButton onPress={handleGooglePress} />
+          {/* Migration status (brief §6: loud-safe, never silent) */}
+          {migration === "uploading" && (
+            <Text style={[styles.migration, { color: t.inkDim }]}>Backing up your history…</Text>
+          )}
 
           {/* Switch to login */}
           <View style={styles.switchRow}>
@@ -341,6 +263,11 @@ export function SignupScreen({ onSwitchToLogin }: SignupScreenProps) {
               <Text style={[styles.switchLink, { color: t.ochre }]}>Log in</Text>
             </Pressable>
           </View>
+
+          {/* Auth is additive, never a gate (brief Section 0/1). */}
+          <Pressable onPress={onDismiss} style={styles.laterRow}>
+            <Text style={[styles.laterText, { color: t.inkDim }]}>Not now</Text>
+          </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -370,16 +297,25 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: TYPE.body,
+    textAlign: "center",
+  },
+  reassure: {
+    fontSize: TYPE.small,
+    lineHeight: 18,
+    textAlign: "center",
+    marginBottom: SPACING.l,
   },
   errorBanner: {
     borderRadius: RADII.card,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: SPACING.s,
-    marginBottom: SPACING.m,
+    borderWidth: 1.5,
+    padding: SPACING.m,
+    marginBottom: SPACING.l,
+    gap: SPACING.s,
   },
   errorText: {
     fontSize: TYPE.small,
     lineHeight: 18,
+    fontWeight: "500",
   },
   errorLink: {
     fontSize: TYPE.small,
@@ -398,29 +334,11 @@ const styles = StyleSheet.create({
   },
   input: {
     borderRadius: RADII.card,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
     paddingHorizontal: SPACING.s,
     paddingVertical: 12,
     fontSize: TYPE.body,
-  },
-  phoneRow: {
-    flexDirection: "row",
-    gap: SPACING.s,
-  },
-  dialCodeWrap: {
-    backgroundColor: "transparent",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "transparent",
-    borderRadius: RADII.card,
-    paddingHorizontal: SPACING.s,
-    justifyContent: "center",
-  },
-  dialCodeText: {
-    fontSize: TYPE.body,
-    fontWeight: "600",
-  },
-  phoneInput: {
-    flex: 1,
+    lineHeight: 20,
   },
   passwordWrap: {
     position: "relative",
@@ -448,25 +366,18 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: SPACING.s,
+    marginTop: SPACING.l,
+    marginBottom: SPACING.m,
     minHeight: 48,
   },
   submitText: {
     fontSize: TYPE.body,
     fontWeight: "800",
   },
-  dividerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: SPACING.l,
-    gap: SPACING.s,
-  },
-  dividerLine: {
-    flex: 1,
-    height: StyleSheet.hairlineWidth,
-  },
-  dividerText: {
+  migration: {
     fontSize: TYPE.small,
+    textAlign: "center",
+    marginBottom: SPACING.s,
   },
   switchRow: {
     flexDirection: "row",
@@ -479,5 +390,15 @@ const styles = StyleSheet.create({
   switchLink: {
     fontSize: TYPE.body,
     fontWeight: "700",
+  },
+  laterRow: {
+    alignItems: "center",
+    marginTop: SPACING.l,
+    minHeight: 32,
+    justifyContent: "center",
+  },
+  laterText: {
+    fontSize: TYPE.small,
+    fontWeight: "600",
   },
 });

@@ -8,12 +8,12 @@ import { elevate } from "../theme/elevation";
 import { PhosphorIcon } from "../components/PhosphorIcon";
 import { TriangleDivider } from "../components/TriangleDivider";
 import {
-  ArrowLeft,
   Bell,
   GlobeHemisphereWest,
   Palette,
   Plugs,
   ShieldCheck,
+  UserCircle,
 } from "phosphor-react-native";
 import { useSettings } from "../store/settings";
 import {
@@ -21,7 +21,7 @@ import {
   notificationStatusLabel,
 } from "../corrections/notifications";
 import type { ThemeMode } from "../store/settings";
-import { useAuth } from "../store/auth";
+import { useAccount } from "../store/account";
 
 const MODES: ReadonlyArray<{ value: ThemeMode; label: string }> = [
   { value: "dark", label: "Dark" },
@@ -35,9 +35,13 @@ export function ProfileScreen() {
   const setProxyUrl = useSettings((s) => s.setProxyUrl);
   const notificationsOn = useSettings((s) => s.notificationsOn);
   const setNotificationsOn = useSettings((s) => s.setNotificationsOn);
-  const user = useAuth((s) => s.user);
-  const logout = useAuth((s) => s.logout);
-  const authLoading = useAuth((s) => s.loading);
+  const user = useAccount((s) => s.user);
+  const logout = useAccount((s) => s.logout);
+  const authLoading = useAccount((s) => s.loading);
+  const openAuthSheet = useAccount((s) => s.openAuthSheet);
+  const lastSyncedAt = useAccount((s) => s.lastSyncedAt);
+  const migration = useAccount((s) => s.migration);
+  const authError = useAccount((s) => s.error);
 
   // V3: OS permission status, so the toggle's caption is never ambiguous.
   const [notifStatus, setNotifStatus] = useState<"granted" | "denied" | "unavailable" | "unset">("unset");
@@ -199,48 +203,78 @@ export function ProfileScreen() {
           </View>
         </Section>
 
-        {user && (
-          <Section title="Account" icon={ArrowLeft} tokens={t}>
-            <View style={[styles.card, { backgroundColor: t.surface2, borderColor: t.line }]}>
-              {user.fullName && (
+        {/* --- Account (brief Section 7): additive, opt-in, never a gate. --- */}
+        <Section title="Account" icon={UserCircle} tokens={t}>
+          <View style={[styles.card, { backgroundColor: t.surface2, borderColor: t.line }]}>
+            {user ? (
+              <>
                 <View style={styles.settingRow}>
-                  <Text style={[styles.settingLabel, { color: t.ink }]}>{user.fullName}</Text>
+                  <Text style={[styles.settingLabel, { color: t.ink }]} numberOfLines={1}>
+                    {user.email}
+                  </Text>
+                  <Text style={[styles.staticTag, { color: t.teal }]}>Synced</Text>
                 </View>
-              )}
-              {user.email && (
-                <View style={styles.settingRow}>
-                  <Text style={[styles.settingNote, { color: t.inkDim }]}>{user.email}</Text>
+                <Text style={[styles.settingNote, { color: t.inkDim, marginBottom: 6 }]}>
+                  {syncStatusText(lastSyncedAt, migration)}
+                </Text>
+                <Text style={[styles.settingNote, { color: t.inkDim }]}>
+                  Your corrections and settings are backed up to your account so they follow you to
+                  any device. Everything also stays on this phone and keeps working offline.
+                </Text>
+                <Pressable
+                  onPress={() => {
+                    Alert.alert(
+                      "Log out",
+                      "Your corrections and settings stay on this phone. You can log back in anytime to back them up again.",
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Log out",
+                          style: "destructive",
+                          onPress: () => void logout(),
+                        },
+                      ],
+                    );
+                  }}
+                  disabled={authLoading}
+                  style={[styles.logoutButton, { backgroundColor: t.rustSoft, borderColor: t.rust }]}
+                >
+                  <Text style={[styles.logoutText, { color: t.rust }]}>Log out</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                {authError?.kind === "SESSION_EXPIRED" && (
+                  <Text style={[styles.sessionNote, { color: t.teal, marginBottom: SPACING.s }]}>
+                    {authError.message}
+                  </Text>
+                )}
+                <Text style={[styles.settingNote, { color: t.inkDim, marginBottom: SPACING.s }]}>
+                  Back up your Learn history and settings, and take them with you to any device.
+                  The app works fully without an account.
+                </Text>
+                <View style={styles.pillRow}>
+                  <Pressable
+                    onPress={() => openAuthSheet("signup")}
+                    style={[styles.pill, { backgroundColor: t.ochre }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Sign up"
+                  >
+                    <Text style={[styles.pillText, { color: t.surface }]}>Sign up</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => openAuthSheet("login")}
+                    style={[styles.pill, { borderWidth: 1.5, borderColor: t.ochre }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Log in"
+                  >
+                    <Text style={[styles.pillText, { color: t.ochre }]}>Log in</Text>
+                  </Pressable>
                 </View>
-              )}
-              {user.country && (
-                <View style={styles.settingRow}>
-                  <Text style={[styles.settingNote, { color: t.inkDim }]}>{user.country}</Text>
-                </View>
-              )}
-              <Pressable
-                onPress={() => {
-                  Alert.alert(
-                    "Log out",
-                    "Are you sure you want to log out?",
-                    [
-                      { text: "Cancel", style: "cancel" },
-                      {
-                        text: "Log out",
-                        style: "destructive",
-                        onPress: () => void logout(),
-                      },
-                    ],
-                  );
-                }}
-                disabled={authLoading}
-                style={[styles.logoutButton, { backgroundColor: t.rustSoft, borderColor: t.rust }]}
-              >
-                <PhosphorIcon icon={ArrowLeft} size={16} color={t.rust} weight="bold" />
-                <Text style={[styles.logoutText, { color: t.rust }]}>Log out</Text>
-              </Pressable>
-            </View>
-          </Section>
-        )}
+              </>
+            )}
+          </View>
+        </Section>
 
         <Text style={[styles.version, { color: t.inkDim }]}>VUGA v1.0.0</Text>
       </ScrollView>
@@ -356,4 +390,38 @@ const styles = StyleSheet.create({
     marginTop: SPACING.xl,
     fontSize: TYPE.tiny,
   },
+  pillRow: {
+    flexDirection: "row",
+    gap: SPACING.s,
+  },
+  sessionNote: {
+    fontSize: TYPE.small,
+    lineHeight: 18,
+    fontWeight: "600",
+  },
+  pill: {
+    flex: 1,
+    borderRadius: RADII.pill,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pillText: {
+    fontSize: TYPE.body,
+    fontWeight: "800",
+  },
 });
+
+/** Human copy for the "Last backed up …" line (brief Section 7). */
+function syncStatusText(lastSyncedAt: string | null, migration: string): string {
+  if (migration === "uploading") return "Backing up your history…";
+  if (migration === "failed") return "Last backup didn't finish — we'll retry automatically.";
+  if (!lastSyncedAt) return "Backup will start shortly.";
+  const mins = Math.floor((Date.now() - new Date(lastSyncedAt).getTime()) / 60_000);
+  if (mins < 1) return "Last backed up just now";
+  if (mins < 60) return `Last backed up ${mins} minute${mins === 1 ? "" : "s"} ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `Last backed up ${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  return `Last backed up ${days} day${days === 1 ? "" : "s"} ago`;
+}

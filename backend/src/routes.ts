@@ -5,8 +5,18 @@ import { runTranscribe, runTranslate, runTts } from "./providers.js";
 import { isSupportedLanguage, normalizeLanguageCode } from "./languages.js";
 import { config } from "./config.js";
 import { googleConfigured } from "./config.js";
+import { authRoutes } from "./authRoutes.js";
+import { dataRoutes } from "./dataRoutes.js";
+import { practiceRoutes } from "./practiceRoutes.js";
+import { dbConfigured } from "./db.js";
 
 export const api = Router();
+
+// --- Auth + sync (additive; brief Sections 2-6). Existing STT/MT/TTS routes
+// below are untouched. Practice drills (learning brief §6) also additive. ---
+api.use("/auth", authRoutes);
+api.use(dataRoutes);
+api.use("/practice", practiceRoutes);
 
 const parseTranscribe = makeCompiler<{ audio: string; languageCode: string }>(TranscribeBody);
 const parseTranslate = makeCompiler<{ text: string; sourceLang: string; targetLang: string }>(TranslateBody);
@@ -32,7 +42,7 @@ function friendlyMessage(code: string, e: Error & { grpcStatus?: string }): stri
     case "UPSTREAM_TIMEOUT":
       return "The translation service took too long to respond. Please try again.";
     case "UNSUPPORTED_LANGUAGE":
-      return "That language is not supported yet. V1 supports Kinyarwanda and Mandarin.";
+      return "That language is not supported yet. VUGA currently supports Kinyarwanda, English, German, and Mandarin.";
     case "PROVIDER_NOT_CONFIGURED":
       return "The server has no translation provider configured. Set GOOGLE_APPLICATION_CREDENTIALS_JSON.";
     default:
@@ -60,12 +70,23 @@ api.get("/health", (_req, res) => {
     ok: true,
     provider: config.provider,
     googleConfigured: googleConfigured(),
+    authConfigured: dbConfigured(),
     time: new Date().toISOString(),
   });
 });
 
 api.get("/languages", (_req, res) => {
-  res.json({ languages: [{ code: "rw" }, { code: "zh-CN" }], pairsLocked: true });
+  // Multilingual brief: list all four verified languages, V1 pair first.
+  // The V1 shape ({ code }) is unchanged — en/de are additive entries.
+  res.json({
+    languages: [
+      { code: "rw" },
+      { code: "zh-CN" },
+      { code: "en" },
+      { code: "de" },
+    ],
+    pairsLocked: false,
+  });
 });
 
 api.post("/transcribe", async (req, res) => {

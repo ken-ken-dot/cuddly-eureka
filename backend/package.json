@@ -7,19 +7,33 @@
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test test/matcher.test.ts",
-    "build": "tsc -p tsconfig.build.json"
+    "test": "node --import tsx --test test/matcher.test.ts test/languages.test.ts",
+    "test:auth": "node --import tsx test/auth-cross-access.test.ts",
+    "test:sm2": "node --import tsx --test test/sm2.test.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "db:check": "tsx scripts/db-check.ts",
+    "db:schema": "tsx scripts/db-check.ts --apply",
+    "stt:stream": "tsx scripts/stt-stream-check.ts"
   },
   "dependencies": {
+    "@google-cloud/speech": "^8.1.0",
     "@sinclair/typebox": "^0.34.0",
+    "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.23.0",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.10.0",
+    "@types/pg": "^8.23.1",
+    "@types/ws": "^8.18.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }

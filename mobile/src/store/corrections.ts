@@ -75,6 +75,15 @@ export const useCorrections = create<CorrectionsState>((set, get) => ({
   },
 }));
 
+/**
+ * Narrow write path for the sync engine (store/sync.ts): persist a merged
+ * list without touching the store's own mutation helpers. Used only when a
+ * cloud pull adds records on sign-in; regular app flow uses keep/remove/clear.
+ */
+export function persistForSync(list: CorrectionRecord[]): Promise<void> {
+  return AsyncStorage.setItem(KEY, JSON.stringify(list)).catch(() => undefined);
+}
+
 function isRecord(v: unknown): v is CorrectionRecord {
   if (typeof v !== "object" || v === null) return false;
   const r = v as Record<string, unknown>;

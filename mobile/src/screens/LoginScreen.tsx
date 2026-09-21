@@ -17,8 +17,8 @@ import { useTheme } from "../theme";
 import { RADII, SPACING, TRACKING, TYPE } from "../theme/tokens";
 import { elevate } from "../theme/elevation";
 import { Logo } from "../components/Logo";
-import { GoogleButton } from "../components/GoogleButton";
-import { useAuth } from "../store/auth";
+import { AuthBackgroundIcons } from "../components/AuthBackgroundIcons";
+import { useAccount } from "../store/account";
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -47,17 +47,26 @@ function validateField(name: keyof FieldErrors, value: string): string | undefin
 
 interface LoginScreenProps {
   onSwitchToSignup: () => void;
+  onDismiss: () => void;
 }
 
-export function LoginScreen({ onSwitchToSignup }: LoginScreenProps) {
+export function LoginScreen({ onSwitchToSignup, onDismiss }: LoginScreenProps) {
   const { tokens: t } = useTheme();
-  const { login, resetPassword, loading, error, clearError } = useAuth();
+  const { login, loading, error, clearError } = useAccount();
+
+  /** Visual family of the error banner, by error class:
+   *  rust for user-fixable (credentials/validation), ochre for setup/config
+   *  issues, dim for network/server faults. */
+  const errorTone: "rust" | "ochre" | "dim" =
+    error?.kind === "AUTH_NOT_CONFIGURED"
+      ? "ochre"
+      : error?.kind === "NETWORK" || error?.kind === "TIMEOUT" || error?.kind === "SERVER"
+        ? "dim"
+        : "rust";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [showResetSent, setShowResetSent] = useState(false);
-  const [resetLoading, setResetLoading] = useState(false);
 
   const [errors, setErrors] = useState<FieldErrors>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -99,32 +108,14 @@ export function LoginScreen({ onSwitchToSignup }: LoginScreenProps) {
   const handleLogin = useCallback(async () => {
     clearError();
     if (!validateAll()) return;
-    await login({ email: email.trim().toLowerCase(), password });
-  }, [email, password, login, clearError, validateAll]);
-
-  const handleForgotPassword = useCallback(async () => {
-    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setErrors((prev) => ({ ...prev, email: "Enter your email above, then tap Forgot password." }));
-      setTouched((prev) => ({ ...prev, email: true }));
-      return;
-    }
-    setResetLoading(true);
-    try {
-      await resetPassword(email.trim().toLowerCase());
-      setShowResetSent(true);
-    } catch {
-      // Error is surfaced via the auth store's error state.
-    } finally {
-      setResetLoading(false);
-    }
-  }, [email, resetPassword]);
-
-  const handleGooglePress = useCallback(() => {
-    // Placeholder — Google OAuth not yet wired.
-  }, []);
+    const ok = await login(email.trim().toLowerCase(), password);
+    if (ok) onDismiss();
+  }, [email, password, login, clearError, validateAll, onDismiss]);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: t.surface }]} edges={["bottom"]}>
+      {/* Decorative background glyphs — non-interactive, behind everything. */}
+      <AuthBackgroundIcons />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -139,28 +130,35 @@ export function LoginScreen({ onSwitchToSignup }: LoginScreenProps) {
             <Logo size={40} ochre={t.ochre} rust={t.rust} />
             <Text style={[styles.title, { color: t.ink }]}>Welcome back</Text>
             <Text style={[styles.subtitle, { color: t.inkDim }]}>
-              Sign in to continue translating
+              Back up your history and take it with you
             </Text>
           </View>
 
-          {/* Error banner */}
+          {/* Error banner — tone reflects the failure family (see errorTone). */}
           {error && (
-            <View style={[styles.errorBanner, { backgroundColor: t.rustSoft, borderColor: t.rust }]}>
-              <Text style={[styles.errorText, { color: t.rust }]}>{error.message}</Text>
-              {error.kind === "USER_NOT_FOUND" && (
+            <View
+              style={[
+                styles.errorBanner,
+                errorTone === "rust" && { backgroundColor: t.rustSoft, borderColor: t.rust },
+                errorTone === "ochre" && { backgroundColor: t.card, borderColor: t.ochre },
+                errorTone === "dim" && { backgroundColor: t.surface2, borderColor: t.line },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.errorText,
+                  errorTone === "rust" && { color: t.rust },
+                  errorTone === "ochre" && { color: t.ochre },
+                  errorTone === "dim" && { color: t.inkDim },
+                ]}
+              >
+                {error.message}
+              </Text>
+              {error.kind === "INVALID_CREDENTIALS" && (
                 <Pressable onPress={onSwitchToSignup}>
                   <Text style={[styles.errorLink, { color: t.ochre }]}>Sign up instead</Text>
                 </Pressable>
               )}
-            </View>
-          )}
-
-          {/* Reset sent confirmation */}
-          {showResetSent && (
-            <View style={[styles.successBanner, { backgroundColor: t.tealSoft, borderColor: t.teal }]}>
-              <Text style={[styles.successText, { color: t.teal }]}>
-                Check your email for a password reset link.
-              </Text>
             </View>
           )}
 
@@ -170,10 +168,7 @@ export function LoginScreen({ onSwitchToSignup }: LoginScreenProps) {
               <Text style={[styles.label, { color: t.inkDim }]}>Email address</Text>
               <TextInput
                 value={email}
-                onChangeText={(v) => {
-                  setEmail(v);
-                  if (showResetSent) setShowResetSent(false);
-                }}
+                onChangeText={setEmail}
                 onBlur={() => handleBlur("email")}
                 placeholder="Email address"
                 placeholderTextColor={t.inkDim}
@@ -229,15 +224,6 @@ export function LoginScreen({ onSwitchToSignup }: LoginScreenProps) {
             </View>
           </Animated.View>
 
-          {/* Forgot password */}
-          <Pressable onPress={handleForgotPassword} disabled={resetLoading} style={styles.forgotRow}>
-            {resetLoading ? (
-              <ActivityIndicator color={t.ochre} size="small" />
-            ) : (
-              <Text style={[styles.forgotText, { color: t.ochre }]}>Forgot password?</Text>
-            )}
-          </Pressable>
-
           {/* Submit */}
           <Pressable
             onPress={handleLogin}
@@ -257,16 +243,6 @@ export function LoginScreen({ onSwitchToSignup }: LoginScreenProps) {
             )}
           </Pressable>
 
-          {/* Divider */}
-          <View style={styles.dividerRow}>
-            <View style={[styles.dividerLine, { backgroundColor: t.line }]} />
-            <Text style={[styles.dividerText, { color: t.inkDim }]}>or</Text>
-            <View style={[styles.dividerLine, { backgroundColor: t.line }]} />
-          </View>
-
-          {/* Google placeholder */}
-          <GoogleButton onPress={handleGooglePress} />
-
           {/* Switch to signup */}
           <View style={styles.switchRow}>
             <Text style={[styles.switchText, { color: t.inkDim }]}>Don't have an account? </Text>
@@ -274,6 +250,11 @@ export function LoginScreen({ onSwitchToSignup }: LoginScreenProps) {
               <Text style={[styles.switchLink, { color: t.ochre }]}>Sign up</Text>
             </Pressable>
           </View>
+
+          {/* Auth is additive, never a gate (brief Section 0/1). */}
+          <Pressable onPress={onDismiss} style={styles.laterRow}>
+            <Text style={[styles.laterText, { color: t.inkDim }]}>Not now</Text>
+          </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -306,28 +287,20 @@ const styles = StyleSheet.create({
   },
   errorBanner: {
     borderRadius: RADII.card,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: SPACING.s,
-    marginBottom: SPACING.m,
+    borderWidth: 1.5,
+    padding: SPACING.m,
+    marginBottom: SPACING.l,
+    gap: SPACING.s,
   },
   errorText: {
     fontSize: TYPE.small,
     lineHeight: 18,
+    fontWeight: "500",
   },
   errorLink: {
     fontSize: TYPE.small,
     fontWeight: "700",
     marginTop: 4,
-  },
-  successBanner: {
-    borderRadius: RADII.card,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: SPACING.s,
-    marginBottom: SPACING.m,
-  },
-  successText: {
-    fontSize: TYPE.small,
-    lineHeight: 18,
   },
   field: {
     marginBottom: SPACING.m,
@@ -341,10 +314,11 @@ const styles = StyleSheet.create({
   },
   input: {
     borderRadius: RADII.card,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
     paddingHorizontal: SPACING.s,
     paddingVertical: 12,
     fontSize: TYPE.body,
+    lineHeight: 20,
   },
   passwordWrap: {
     position: "relative",
@@ -367,38 +341,18 @@ const styles = StyleSheet.create({
     fontSize: TYPE.small,
     marginTop: 4,
   },
-  forgotRow: {
-    alignItems: "flex-end",
-    marginBottom: SPACING.m,
-    minHeight: 24,
-  },
-  forgotText: {
-    fontSize: TYPE.small,
-    fontWeight: "700",
-  },
   submitButton: {
     borderRadius: RADII.button,
     paddingVertical: 14,
     alignItems: "center",
     justifyContent: "center",
+    marginTop: SPACING.l,
+    marginBottom: SPACING.m,
     minHeight: 48,
   },
   submitText: {
     fontSize: TYPE.body,
     fontWeight: "800",
-  },
-  dividerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: SPACING.l,
-    gap: SPACING.s,
-  },
-  dividerLine: {
-    flex: 1,
-    height: StyleSheet.hairlineWidth,
-  },
-  dividerText: {
-    fontSize: TYPE.small,
   },
   switchRow: {
     flexDirection: "row",
@@ -411,5 +365,15 @@ const styles = StyleSheet.create({
   switchLink: {
     fontSize: TYPE.body,
     fontWeight: "700",
+  },
+  laterRow: {
+    alignItems: "center",
+    marginTop: SPACING.l,
+    minHeight: 32,
+    justifyContent: "center",
+  },
+  laterText: {
+    fontSize: TYPE.small,
+    fontWeight: "600",
   },
 });

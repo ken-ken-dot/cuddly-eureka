@@ -29,6 +29,9 @@
       "eas": {
         "projectId": ""
       }
-    }
+    },
+    "plugins": [
+      "expo-notifications"
+    ]
   }
 }

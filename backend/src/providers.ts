@@ -57,10 +57,23 @@ function mockTranscribe(audioBase64: string, languageCode: string): TranscribeRe
     });
   }
   // Deterministic fake transcript so UI flows can be exercised without keys.
-  const text = languageCode === MANDARIN.code
-    ? "你好，我要买一些水果。"
-    : "Muraho, nshaka kugura imboga.";
-  return { text, lang: languageCode, confidence: 0.86, provider: "mock", mock: true };
+  return { text: mockTranscriptFor(languageCode), lang: languageCode, confidence: 0.86, provider: "mock", mock: true };
+}
+
+/** Deterministic placeholder transcript per language (mock mode only).
+ *  rw/zh outputs are byte-identical to V1; en/de were rejected at the route
+ *  layer before the multilingual brief, so nothing existing changes. */
+export function mockTranscriptFor(languageCode: string): string {
+  switch (languageCode) {
+    case MANDARIN.code:
+      return "你好，我要买一些水果。";
+    case "en":
+      return "Hello, I would like to buy some vegetables.";
+    case "de":
+      return "Hallo, ich möchte etwas Gemüse kaufen.";
+    default:
+      return "Muraho, nshaka kugura imboga.";
+  }
 }
 
 function mockTranslate(text: string, targetLang: string): TranslateResult {

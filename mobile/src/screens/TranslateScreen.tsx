@@ -18,6 +18,7 @@ import { elevate } from "../theme/elevation";
 import { PhosphorIcon } from "../components/PhosphorIcon";
 import { Logo } from "../components/Logo";
 import { LanguageToggle } from "../components/LanguageToggle";
+import { LanguagePicker } from "../components/LanguagePicker";
 import { MicButton, type MicButtonState } from "../components/MicButton";
 import { EmptyState } from "../components/EmptyState";
 import { Ticket } from "../components/Ticket";
@@ -26,8 +27,11 @@ import { ErrorBar } from "../components/ErrorBar";
 import { useSession, ERROR_COPY } from "../store/session";
 import { useCorrections } from "../store/corrections";
 import { useSpeech } from "../speech/useSpeech";
+import { openRealtimeSession, type RelayHandle } from "../api/realtime";
+import { startLiveAudio } from "../speech/liveAudio";
 import { evaluateKeptMistake } from "../corrections/notifications";
 import type { Turn } from "../types";
+import { directionLanguages } from "../types";
 import {
   Keyboard,
   Microphone,
@@ -45,7 +49,79 @@ export function TranslateScreen() {
   const [draft, setDraft] = useState("");
   const listRef = useRef<FlatList<Turn>>(null);
 
+  // --- Live real-time mode (multilingual brief Section 4) — additive. The
+  // default VOICE flow below is byte-for-byte the V1 behavior; LIVE is an
+  // explicit opt-in toggle that routes the mic through the WS relay instead.
+  const [liveMode, setLiveMode] = useState(false);
+  const relayRef = useRef<RelayHandle | null>(null);
+  const audioRef = useRef<{ stop: () => Promise<void> } | null>(null);
+
+  const stopLive = useCallback(async () => {
+    relayRef.current?.stop();
+    relayRef.current = null;
+    await audioRef.current?.stop().catch(() => undefined);
+    audioRef.current = null;
+    session.setLive(false);
+    session.setLivePartial("");
+  }, [session]);
+
+  const startLive = useCallback(async () => {
+    session.clearError();
+    const { source, target } = directionLanguages(session.direction);
+    try {
+      const audio = await startLiveAudio({
+        onChunk: (chunk) => relayRef.current?.sendAudioChunk(chunk),
+        onEnded: () => {
+          void stopLive();
+          session.setError({ kind: "mic", message: ERROR_COPY.mic });
+        },
+      });
+      audioRef.current = audio;
+      const relay = openRealtimeSession(source, target, {
+        onState: (state) => {
+          if (state === "idle" && relayRef.current) {
+            // Server closed (error/stop) — stop capture and reset the toggle.
+            void stopLive();
+          }
+        },
+        onPartial: (text) => session.setLivePartial(text),
+        onFinal: (text, translated) => session.pushLiveTurn(text, translated, session.direction),
+        onError: (code, message, fatal) => {
+          session.setError({ kind: fatal ? "provider" : "network", message });
+          if (fatal) void stopLive();
+        },
+      });
+      relayRef.current = relay;
+      session.setLive(true);
+      AccessibilityInfo.announceForAccessibility("Live translation on. Press the microphone again to stop.");
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "";
+      session.setError(
+        message === "PERMISSION"
+          ? { kind: "permission", message: ERROR_COPY.permission }
+          : { kind: "mic", message: ERROR_COPY.mic },
+      );
+    }
+  }, [session, stopLive]);
+
+  const toggleLiveMode = useCallback(() => {
+    setLiveMode((v) => {
+      if (v) void stopLive();
+      return !v;
+    });
+  }, [stopLive]);
+
   const onMicPress = useCallback(async () => {
+    // LIVE mode: mic press starts/stops the continuous relay session.
+    if (liveMode) {
+      if (session.live) {
+        await stopLive();
+      } else {
+        await startLive();
+      }
+      return;
+    }
+    // --- V1 flow, unchanged ---
     if (session.listening) {
       session.setListening(false);
       const audio = await speech.stop();
@@ -66,7 +142,7 @@ export function TranslateScreen() {
     } else {
       session.setError({ kind: "mic", message: ERROR_COPY.mic });
     }
-  }, [session, speech]);
+  }, [session, speech, liveMode, startLive, stopLive]);
 
   const onSubmitText = useCallback(async () => {
     const value = draft;
@@ -106,10 +182,21 @@ export function TranslateScreen() {
     }
   }, [session.lastTurnId]);
 
+  // Tear the relay down when the screen unmounts (tab switch / app close).
+  useEffect(() => {
+    return () => {
+      relayRef.current?.stop();
+      relayRef.current = null;
+      void audioRef.current?.stop().catch(() => undefined);
+      audioRef.current = null;
+    };
+  }, []);
+
   // Mic button state machine: idle breathing → recording ring → processing.
+  // LIVE mode reuses the same visual states via session.live.
   const micState: MicButtonState = session.submitting
     ? "processing"
-    : session.listening
+    : session.listening || session.live
       ? "recording"
       : "idle";
 
@@ -131,7 +218,11 @@ export function TranslateScreen() {
               </View>
             ) : null}
           </View>
-          <LanguageToggle tokens={t} value={session.direction} onChange={session.setDirection} />
+          {/* Multilingual brief Section 5: four verified languages via the
+              source/target picker. Kinyarwanda⇄Mandarin stays the default
+              option; the V1 two-segment toggle remains for the locked-pair
+              layout if product wants it back. */}
+          <LanguagePicker tokens={t} value={session.direction} onChange={session.setDirection} />
         </View>
 
         {session.mockMode ? (
@@ -205,6 +296,13 @@ export function TranslateScreen() {
           }}
         />
 
+        {/* Live interim transcript — only during an open relay session */}
+        {session.live && session.livePartial ? (
+          <View style={styles.livePartialWrap}>
+            <Text style={[styles.livePartial, { color: t.inkDim }]}>{session.livePartial}…</Text>
+          </View>
+        ) : null}
+
         {/* Text input mode */}
         {textMode ? (
           <View style={styles.textInputRow}>
@@ -257,7 +355,24 @@ export function TranslateScreen() {
             </Pressable>
           </View>
           <MicButton tokens={t} state={micState} onPress={onMicPress} />
-          <View style={styles.side} />
+          <View style={styles.side}>
+            {/* Multilingual brief Section 4: opt-in continuous real-time mode.
+                Off by default — V1's record-once flow stays the default. */}
+            <Pressable
+              accessible
+              accessibilityRole="button"
+              accessibilityState={{ selected: liveMode }}
+              accessibilityLabel={liveMode ? "Turn off live mode" : "Turn on live mode"}
+              onPress={toggleLiveMode}
+              style={({ pressed }) => [
+                styles.modeBtn,
+                { backgroundColor: liveMode ? t.cardIn : "transparent", opacity: pressed ? 0.8 : 1 },
+              ]}
+            >
+              <PhosphorIcon icon={WaveformIcon} size={16} color={liveMode ? t.ochre : t.inkDim} />
+              <Text style={[styles.modeLabel, { color: liveMode ? t.ochre : t.inkDim }]}>LIVE</Text>
+            </Pressable>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -348,4 +463,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   modeLabel: { fontSize: TYPE.tiny, fontWeight: "800", letterSpacing: TRACKING.wide },
+  livePartialWrap: {
+    paddingHorizontal: SPACING.m,
+    paddingTop: SPACING.xs,
+    alignItems: "center",
+  },
+  livePartial: { fontSize: TYPE.body, fontStyle: "italic" },
 });
